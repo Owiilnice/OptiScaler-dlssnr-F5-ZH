@@ -2,7 +2,9 @@
 // cl /std:c++20 /EHsc tests/nr_vit_reuse_smoke.cpp
 #include "../OptiScaler/dlssnr/DlssNrVitReuse.h"
 
+#include <algorithm>
 #include <cstdio>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -29,12 +31,13 @@ struct Result
     bool wellFormed = true;
 };
 
-static Result Eval(Filter& f, const void* feature, bool reset, unsigned every, const Seq& seq = kEval)
+static Result Eval(Filter& f, const void* feature, bool reset, unsigned every, const Seq& seq = kEval, long long slot = -1,
+                   KernelSet set = KernelSet::Fp8, unsigned everyPlain = 0)
 {
     Result r;
-    f.Begin(feature, reset, every);
+    f.Begin(feature, reset, every, slot, everyPlain);
     for (Role role : seq)
-        r.dropped.push_back(f.Drop(role));
+        r.dropped.push_back(f.Drop(role, set));
     r.wellFormed = f.End();
     return r;
 }
@@ -66,6 +69,37 @@ int main()
     CHECK(RoleOf("cc_cb_clear") == Role::None);
     CHECK(RoleOf("cc_vit_ffn_expand") == Role::None); // the 2D ViT kernels are not the bottleneck range
     CHECK(RoleOf(nullptr) == Role::None);
+
+    // the kernel set comes from the name: the fp8 kernels carry the _fp8 suffix
+    CHECK(SetOf("cc_vit_1d_repack_2d_to_1d_fp8") == KernelSet::Fp8);
+    CHECK(SetOf("cc_vit_1d_repack_2d_to_1d") == KernelSet::Plain);
+    CHECK(SetOf("cc_vit_1d_fp8_projection") == KernelSet::Plain); // only a suffix counts
+    CHECK(SetOf(nullptr) == KernelSet::Unknown);
+
+    { // each kernel set follows its own rate: fp8 at 2, plain at 1
+        Filter f;
+        CHECK(f.LastSet() == KernelSet::Unknown);
+        for (int i = 0; i < 4; ++i)
+            CHECK(Kept(Eval(f, &a, false, 2, kEval, -1, KernelSet::Plain, 1)));
+        CHECK(f.LastSet() == KernelSet::Plain);
+        CHECK(Kept(Eval(f, &b, false, 2, kEval, -1, KernelSet::Fp8, 1)));
+        CHECK(Dropped(Eval(f, &b, false, 2, kEval, -1, KernelSet::Fp8, 1)));
+        CHECK(f.LastSet() == KernelSet::Fp8);
+    }
+
+    { // and the other way round: plain at 2 reuses, fp8 at 1 never does
+        Filter f;
+        CHECK(Kept(Eval(f, &a, false, 1, kEval, -1, KernelSet::Plain, 2)));
+        CHECK(Dropped(Eval(f, &a, false, 1, kEval, -1, KernelSet::Plain, 2)));
+        CHECK(Kept(Eval(f, &b, false, 1, kEval, -1, KernelSet::Fp8, 2)));
+        CHECK(Kept(Eval(f, &b, false, 1, kEval, -1, KernelSet::Fp8, 2)));
+    }
+
+    { // everyPlain 0 = the same rate as fp8 (callers that do not tell the sets apart)
+        Filter f;
+        CHECK(Kept(Eval(f, &a, false, 2, kEval, -1, KernelSet::Plain)));
+        CHECK(Dropped(Eval(f, &a, false, 2, kEval, -1, KernelSet::Plain)));
+    }
 
     { // outside an evaluation nothing is touched, whatever the setting
         Filter f;
@@ -121,6 +155,50 @@ int main()
         CHECK(Dropped(Eval(f, &a, false, 2)));
         CHECK(Dropped(Eval(f, &b, false, 2)));
         CHECK(Kept(Eval(f, &a, false, 2)));
+    }
+
+    { // passes share the frame's slot, N = 2, 3 passes: all compute on even frames, all reuse on odd ones
+        Filter f;
+        int p[3];
+        for (int frame = 0; frame < 9; ++frame)
+        {
+            int computed = 0;
+            for (int pass = 0; pass < 3; ++pass)
+                computed += Kept(Eval(f, &p[pass], false, 2, kEval, frame));
+            CHECK(computed == (frame % 2 ? 0 : 3));
+        }
+    }
+
+    { // a pass that starts over on an off frame (reset of that pass alone) is back in the frame's phase on the next frame
+        Filter f;
+        int p[3];
+        std::vector<std::string> seen;
+        for (int frame = 0; frame < 8; ++frame)
+        {
+            std::string s;
+            for (int pass = 0; pass < 3; ++pass)
+                s += Kept(Eval(f, &p[pass], pass == 1 && frame == 5, 2, kEval, frame)) ? 'V' : '-';
+            seen.push_back(s);
+        }
+        CHECK(seen[4] == "VVV" && seen[5] == "-V-" && seen[6] == "VVV" && seen[7] == "---");
+    }
+
+    { // anchored or not, a pass never waits longer than N - 1 reused evaluations, for N = 2 and 3, any phase, with a reset
+        for (unsigned every = 2; every <= 3; ++every)
+            for (int pass = -1; pass < 4; ++pass)
+            {
+                Filter f;
+                int run = 0, worst = 0, computed = 0;
+                for (int frame = 0; frame < 12; ++frame)
+                {
+                    if (Kept(Eval(f, &a, frame == 5, every, kEval, pass < 0 ? -1 : frame + pass)))
+                        run = 0, ++computed;
+                    else
+                        worst = std::max(worst, ++run);
+                }
+                CHECK(worst <= (int) every - 1);
+                CHECK(computed <= 12 / (int) every + 2); // still reuses: at most the first frame and the reset extra
+            }
     }
 
     { // destroying the modules invalidates every cache

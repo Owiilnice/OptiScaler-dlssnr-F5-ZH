@@ -65,7 +65,7 @@ struct State{std::recursive_mutex mutex;bool enabled=false,candidate=false,resta
  // work, per the file's retain-until-exit model) so the s.sessions scans stay bounded.
  std::vector<Session>graveyard;
  DlssNrKernelProfile::Profiler prof;std::map<NVDX_ObjectHandle,DlssNrKernelProfile::Info>fnInfo; // kernel census and per-group GPU timing (ini KernelProfile)
- DlssNrVitReuse::Filter vit;std::map<NVDX_ObjectHandle,DlssNrVitReuse::Role>vitRole; // ViT reuse: launches of the ViT run are dropped on reused frames
+ DlssNrVitReuse::Filter vit;std::map<NVDX_ObjectHandle,std::pair<DlssNrVitReuse::Role,DlssNrVitReuse::KernelSet>>vitRole; // ViT reuse: launches of the ViT run are dropped on reused frames; each kernel set has its own rate
  decltype(&NvAPI_D3D12_CreateCuModule) createModule=nullptr;decltype(&NvAPI_D3D12_CreateCuFunction)createFunction=nullptr;decltype(&NvAPI_D3D12_LaunchCuKernelChain)launch=nullptr;
  decltype(&NvAPI_D3D12_DestroyCuModule)destroyModule=nullptr;decltype(&NvAPI_D3D12_DestroyCuFunction)destroyFunction=nullptr;};
 // Deliberately retain resources until process exit, never free under recorded GPU work.
@@ -138,14 +138,19 @@ void Vendor(ID3D12GraphicsCommandList*c,Device&d,Session&s){auto&t=d.contracts.a
  LaunchBlob(c,t.fn,p.data(),(unsigned)p.size(),t.grid,t.block,t.shared);ScratchBarrier(c,s.tokens,4,{s.c.gpu.Get()});}
 bool Supported(const void*data,unsigned bytes){if(bytes!=3202680||!data)return false;const unsigned char expected[32]={0x3f,0xa6,0xf0,0x76,0xee,0xcf,0xbb,0x6e,0x19,0xc3,0x78,0xf8,0x4b,0xbb,0x70,0x25,0xcd,0x80,0x5e,0xd4,0xde,0x9a,0x2f,0x9c,0x9b,0x99,0x5e,0xb3,0x4a,0x7f,0x3d,0x76};unsigned char hash[32];return BCryptHash(BCRYPT_SHA256_ALG_HANDLE,nullptr,0,(PUCHAR)data,bytes,hash,32)==0&&!memcmp(hash,expected,32);}
 NvAPI_Status __cdecl CreateModule(ID3D12Device*d,const void*b,NvU32 n,NVDX_ObjectHandle*out){auto&s=S();std::lock_guard<std::recursive_mutex>apiGuard(s.mutex);auto rc=s.createModule(d,b,n,out);if(rc==0){std::lock_guard<std::recursive_mutex>g(s.mutex);s.modules[*out]=Supported(b,n);s.active=false;}return rc;}
-NvAPI_Status __cdecl CreateFunction(ID3D12Device*d,NVDX_ObjectHandle m,const char*n,NVDX_ObjectHandle*out){auto&s=S();std::lock_guard<std::recursive_mutex>apiGuard(s.mutex);auto rc=s.createFunction(d,m,n,out);if(rc==0&&n){{std::lock_guard<std::recursive_mutex>g(s.mutex);s.fnInfo[*out]=DlssNrKernelProfile::Classify(n);}{auto role=DlssNrVitReuse::RoleOf(n);if(role!=DlssNrVitReuse::Role::None){std::lock_guard<std::recursive_mutex>g(s.mutex);s.vitRole[*out]=role;}}unsigned kind=99;if(!strcmp(n,"cc_vit_1d_ffn_expand_publish_fp8"))kind=0;else if(!strcmp(n,"cc_vit_1d_ffn_expand_chained_fp8"))kind=1;else if(!strcmp(n,"cc_vit_1d_ffn_contract_chained_fp8"))kind=2;if(kind!=99){std::lock_guard<std::recursive_mutex>g(s.mutex);s.targets[*out]={d,m,kind,s.modules[m]};}}return rc;}
+NvAPI_Status __cdecl CreateFunction(ID3D12Device*d,NVDX_ObjectHandle m,const char*n,NVDX_ObjectHandle*out){auto&s=S();std::lock_guard<std::recursive_mutex>apiGuard(s.mutex);auto rc=s.createFunction(d,m,n,out);if(rc==0&&n){{std::lock_guard<std::recursive_mutex>g(s.mutex);s.fnInfo[*out]=DlssNrKernelProfile::Classify(n);}{auto role=DlssNrVitReuse::RoleOf(n);if(role!=DlssNrVitReuse::Role::None){std::lock_guard<std::recursive_mutex>g(s.mutex);s.vitRole[*out]={role,DlssNrVitReuse::SetOf(n)};}}unsigned kind=99;if(!strcmp(n,"cc_vit_1d_ffn_expand_publish_fp8"))kind=0;else if(!strcmp(n,"cc_vit_1d_ffn_expand_chained_fp8"))kind=1;else if(!strcmp(n,"cc_vit_1d_ffn_contract_chained_fp8"))kind=2;if(kind!=99){std::lock_guard<std::recursive_mutex>g(s.mutex);s.targets[*out]={d,m,kind,s.modules[m]};}}return rc;}
 // ViT reuse: true when at least one launch of this call was dropped; `kept` then holds the others. Only launches recorded inside an NR evaluation are looked at.
-bool VitDrop(State&s,const NVAPI_CU_KERNEL_LAUNCH_PARAMS*k,NvU32 count,std::vector<NVAPI_CU_KERNEL_LAUNCH_PARAMS>&kept){
+// `gap`: where in `kept` the last launch of a skipped run was, or -1 when it was not among them.
+bool VitDrop(State&s,const NVAPI_CU_KERNEL_LAUNCH_PARAMS*k,NvU32 count,std::vector<NVAPI_CU_KERNEL_LAUNCH_PARAMS>&kept,ptrdiff_t&gap){
  if(!k||!count||!s.vit.Evaluating())return false;bool any=false;
- for(NvU32 i=0;i<count;++i){auto it=s.vitRole.find(k[i].hFunction);if(s.vit.Drop(it==s.vitRole.end()?DlssNrVitReuse::Role::None:it->second))any=true;else kept.push_back(k[i]);}
+ for(NvU32 i=0;i<count;++i){auto it=s.vitRole.find(k[i].hFunction);auto role=it==s.vitRole.end()?DlssNrVitReuse::Role::None:it->second.first;if(s.vit.Drop(role,it==s.vitRole.end()?DlssNrVitReuse::KernelSet::Unknown:it->second.second)){any=true;if(role==DlssNrVitReuse::Role::End)gap=(ptrdiff_t)kept.size();}else kept.push_back(k[i]);}
  return any;}
 NvAPI_Status __cdecl Launch(ID3D12GraphicsCommandList*c,const NVAPI_CU_KERNEL_LAUNCH_PARAMS*k,NvU32 count){auto&s=S();std::lock_guard<std::recursive_mutex>g(s.mutex);
- {std::vector<NVAPI_CU_KERNEL_LAUNCH_PARAMS>kept;if(VitDrop(s,k,count,kept)){if(kept.empty())return NVAPI_OK;return RealLaunch(s,c,kept.data(),(NvU32)kept.size());}}
+ // A UAV barrier where the skipped run would have been: without it the kernel before the gap and the decoder after it can overlap on the
+ // GPU. The run's own kernels kept them apart; the plain fp16 kernel set flickered on reused frames without it (the fp8 set did not show it).
+ {std::vector<NVAPI_CU_KERNEL_LAUNCH_PARAMS>kept;ptrdiff_t gap=-1;if(VitDrop(s,k,count,kept,gap)){if(gap<0)return kept.empty()?NVAPI_OK:RealLaunch(s,c,kept.data(),(NvU32)kept.size());
+  // the kept launches of this call on either side of the gap go out as two chains with the barrier between them
+  if(gap>0){auto r=RealLaunch(s,c,kept.data(),(NvU32)gap);if(r!=NVAPI_OK)return r;}Barrier(c);return (size_t)gap<kept.size()?RealLaunch(s,c,kept.data()+gap,(NvU32)(kept.size()-gap)):NVAPI_OK;}}
  // FP8 passthrough must stay available even after a latched hybrid failure: check `enabled`
  // first so switching Precision back to NVIDIA (FP8) fully recovers without an app restart.
  if(!s.enabled)return RealLaunch(s,c,k,count);if(s.restartRequired)return NVAPI_ERROR;if(!k||count!=1){auto pending=std::find_if(s.sessions.begin(),s.sessions.end(),[&](const auto&v){return std::get<0>(v.first)==c&&v.second.pending;});if(pending!=s.sessions.end()){s.restartRequired=true;s.status="Restart required: unsupported launch chain while hybrid pair pending; precision change unavailable";fprintf(stderr,"%s\n",s.status.c_str());return NVAPI_ERROR;}return RealLaunch(s,c,k,count);}auto target=s.targets.find(k->hFunction);if(target==s.targets.end())return RealLaunch(s,c,k,count);auto&t=target->second;
@@ -211,9 +216,11 @@ void SetPrecision(unsigned precision){auto&s=S();std::lock_guard<std::recursive_
 }
 void SetEnabled(bool on){SetPrecision(on?4u:0u);}
 bool IsActive(){auto&s=S();std::lock_guard<std::recursive_mutex>g(s.mutex);return s.enabled&&s.active&&!s.restartRequired;}
-void BeginEvaluate(const void*feature,bool reset,unsigned every,ID3D12GraphicsCommandList*cmd,bool profile){auto&s=S();std::lock_guard<std::recursive_mutex>g(s.mutex);s.vit.Begin(feature,reset,every);s.prof.Begin(cmd,profile);}
+void BeginEvaluate(const void*feature,bool reset,unsigned every,unsigned everyPlain,long long slot,ID3D12GraphicsCommandList*cmd,bool profile){auto&s=S();std::lock_guard<std::recursive_mutex>g(s.mutex);s.vit.Begin(feature,reset,every,slot,everyPlain);s.prof.Begin(cmd,profile);}
 void EndEvaluate(ID3D12GraphicsCommandList*cmd){auto&s=S();std::lock_guard<std::recursive_mutex>g(s.mutex);s.prof.End(cmd);const bool wasOff=s.vit.Disabled();if(!s.vit.End()&&!wasOff)fprintf(stderr,"DLSS-NR ViT reuse: unexpected launch order, reuse is off for this session\n");}
 std::vector<std::string> TakeProfileReports(){auto&s=S();std::lock_guard<std::recursive_mutex>g(s.mutex);return s.prof.TakeReports();}
 std::string VitStatus(){auto&s=S();std::lock_guard<std::recursive_mutex>g(s.mutex);return s.vit.Status();}
+bool VitPlainKernels(){return S().vit.LastSet()==DlssNrVitReuse::KernelSet::Plain;}
+const char* VitKernelSet(){switch(S().vit.LastSet()){case DlssNrVitReuse::KernelSet::Fp8:return "FP8";case DlssNrVitReuse::KernelSet::Plain:return "plain FP16";default:return "not seen yet";}}
 std::string Status(){auto&s=S();std::lock_guard<std::recursive_mutex>g(s.mutex);return s.status+" | rewritten original launches: "+std::to_string(s.launches)+" | candidate split contractions: "+std::to_string(s.splitLaunches);}
 }

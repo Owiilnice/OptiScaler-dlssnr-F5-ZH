@@ -13,6 +13,7 @@
 #include <shaders/dlssnr/DlssNr_TrimAnchors.h>
 #include <shaders/dlssnr/DlssNr_AutoTrimDefault.h>
 #include <shaders/dlssnr/DlssNr_FollowGame.h>
+#include "DlssNr_GameDefaults.h"
 
 #include <string>
 #include <vector>
@@ -198,9 +199,9 @@ struct PassProfile
     float skin;
 };
 
-static constexpr PassProfile PresetPass1 { 1u, 2.0f, 2.0f, 2.0f, -1.0f };  // Natural
-static constexpr PassProfile PresetPass2 { 1u, 1.0f, 1.25f, 0.45f, 0.25f }; // Natural
-static constexpr PassProfile PresetPass3 { 0u, 1.0f, 1.25f, 1.25f, 1.0f };  // Standard
+static constexpr PassProfile PresetPass1 { 1u, 1.8f, 1.8f, 1.8f, -1.0f };    // Natural
+static constexpr PassProfile PresetPass2 { 1u, 1.0f, 1.0f, 1.0f, -1.0f };    // Natural
+static constexpr PassProfile PresetPass3 { 1u, 0.75f, 1.5f, 0.46f, 1.0f };   // Natural
 
 // This fork's recommended starting points for the "Model passes" slider, one per pass count.
 // Each button touches only the settings named below (including Pass 2/3 overrides once the
@@ -211,13 +212,14 @@ static void ApplyPassPreset(Config* config, unsigned int passes)
 {
     config->DlssNrEnabled = true;
     config->DlssNrPrecision = 0u; // NVIDIA (FP8)
-    config->DlssNrVitEvery = 1u;
     config->DlssNrApplyModel = true;
     config->DlssNrUnlockPasses = false;
     config->DlssNrPasses = passes;
 
     // Upscale Method, Upscale Mode and Final Image Composition are deliberately not set here: the Pre-SR/Post-SR
     // tiers set them, and writing them from a pass preset would clear that tier's highlight.
+    // Reuse bottleneck is not set here either: it is a speed/quality choice per kernel set, not part of a look, so a
+    // preset leaves both checkboxes as the user had them.
     config->DlssNrTransferStrength = 1.0f;      // Detail strength
     config->DlssNrColourStrength = 1.0f;
     config->DlssNrStyle = PresetPass1.style;
@@ -226,7 +228,7 @@ static void ApplyPassPreset(Config* config, unsigned int passes)
     config->DlssNrLocalTone = PresetPass1.tone;
     config->DlssNrSkinStructure = PresetPass1.skin;
     config->DlssNrAutoMask = true;
-    // Automatic exposure at the default chosen for the game (DlssNr_AutoTrimDefault.h). Game exposure at 1x, which
+    // Automatic exposure at its default brightness (DlssNr_AutoTrimDefault.h). Game exposure at 1x, which
     // this used to set, gave NBA 2K27 a model input with a median of 0.07-0.32 (measured 2026-09-25).
     config->DlssNrWhitePointSource = 3u;        // Automatic exposure
     config->DlssNrAutoExposureTrim = std::nullopt;
@@ -681,7 +683,7 @@ void RenderMenu(Config* config, float menuResScale)
                     const auto trimAnchors =
                         DlssNrTrim::Parse(config->DlssNrAutoExposureTrimAnchors.value_or_default());
                     const float trim = DlssNrTrim::TrimForKey(
-                        baseWhitePoint, DlssNrAutoTrim::Effective(config->DlssNrAutoExposureTrim), trimAnchors, false);
+                        baseWhitePoint, DlssNr::AutoTrimEffective(*config), trimAnchors, false);
                     // Middle-grey metering, mode 13 in dlssnr.hlsl: exposure = 0.18 / (0.82 * average scene brightness).
                     ImGui::TextColored(ImVec4(0.45f, 0.8f, 0.45f, 1.0f),
                                        "Scene brightness %.3f  ->  model white at %.2f",
@@ -863,60 +865,60 @@ void RenderMenu(Config* config, float menuResScale)
         else if (wpSource == 3)
         {
             // The scale stays centred on a 5x Trim (0 EV), the old default from the PR this came from. The default is
-            // now chosen per game from the frame type -- +4.3 EV unexposed, +2.3 EV pre-exposed -- see
-            // DlssNr_AutoTrimDefault.h for the measurements. It is independent of the Game exposure Trim.
+            // +1.5 EV for every game; see DlssNr_AutoTrimDefault.h for the measurements. It is independent of the Game exposure Trim.
             RenderTrimEvSlider(config->DlssNrAutoExposureTrim, 5.0f,
                                DlssNrTrim::Parse(config->DlssNrAutoExposureTrimAnchors.value_or_default()).size(),
                                "autoexposure",
                                "Brightness of the picture handed to NR. + is brighter, - is darker."
-                               "\nUntil you move it, the default is chosen for the game: +4.3 EV when the game hands over"
-                               "\nits frame before applying its exposure (unexposed, e.g. RDR2), +2.3 EV when the exposure"
-                               "\nis already applied (pre-exposed, e.g. NBA 2K27, Cyberpunk 2077, The Witcher 3)."
+                               "\nUntil you move it, it is +1.5 EV in every game."
                                "\nReset goes back to that default."
                                "\nToo bright clips highlights or tints shadows; too dark hides shadow detail."
                                "\nOptiScaler meters the linear HDR frame itself before NR runs."
                                "\nAutomatic exposure is available on D3D12 and Vulkan.",
-                               DlssNrAutoTrim::Instance().DefaultTrim());
+                               DlssNrAutoTrim::kDefaultTrim);
 
-            {
-                const auto verdict = DlssNrAutoTrim::Instance().Get();
-                const char* kind = verdict == DlssNrAutoTrim::Verdict::Unexposed   ? "+4.3 EV (unexposed frame detected)"
-                                   : verdict == DlssNrAutoTrim::Verdict::PreExposed ? "+2.3 EV (pre-exposed frame detected)"
-                                                                                       : "+2.3 EV (detecting...)";
-                ImGui::TextDisabled("Default for this game: %s%s", kind,
-                                    config->DlssNrAutoExposureTrim.has_value() ? "; your setting is in use" : "");
-            }
-
-            // Following the game's own exposure on an unexposed frame (DlssNr_FollowGame.h). Vulkan follows from the host
-            // value, a few frames behind the game.
+            // Following the game's own exposure (DlssNr_FollowGame.h): on by default for a known unexposed game
+            // (DlssNr_GameDefaults.h). Vulkan follows from the host value, a few frames behind the game.
             {
                 const bool followVk = DlssNr::IsRunningVk();
-                bool follow = config->DlssNrAutoExposureFollowGame.value_or_default();
+                bool follow = DlssNr::FollowGameOn(*config);
 
                 if (ImGui::Checkbox("Follow the game's exposure", &follow))
                     config->DlssNrAutoExposureFollowGame = follow;
 
-                HelpMarker("For games that hand over their frame before applying their own exposure (e.g. RDR2)."
-                           "\nAutomatic learns how its own metering relates to the game's exposure in the first"
-                           "\nseconds of play, then follows the game's exposure, so brightness moves exactly with"
-                           "\nthe game: cutscenes, menus, fades. The brightness slider keeps its meaning."
-                           "\nGames that expose their frame themselves are not affected."
-                           "\nOn Vulkan it follows a few frames behind the game.");
+                HelpMarker("For games that hand over their frame before applying their own exposure: on by default"
+                           "\nfor those known to (RDR2), off for every other game. Automatic learns how its own metering"
+                           "\nrelates to the game's exposure in the first seconds of play, then follows the game's exposure,"
+                           "\nso brightness moves exactly with the game: cutscenes, menus, fades. The brightness slider"
+                           "\nkeeps its meaning. Leave it off for games that expose their frame themselves (most games):"
+                           "\nit would apply their exposure twice. On Vulkan it follows a few frames behind the game.");
 
                 const auto followStatus =
                     followVk ? DlssNr::FollowGameExposureStatusVk() : DlssNr::FollowGameExposureStatus();
                 const auto& calibration = DlssNrFollowGame::Instance();
 
-                if (DlssNrAutoTrim::Instance().Get() != DlssNrAutoTrim::Verdict::Unexposed)
-                    ImGui::TextDisabled("Not used: this game exposes its frame itself");
+                if (!follow)
+                    ImGui::TextDisabled("Off");
                 else if (!followStatus.gameExposureSeen)
-                    ImGui::TextDisabled("Not available: the game supplies no exposure");
+                    ImGui::TextDisabled("Not available yet: no exposure from the game");
                 else if (!calibration.Locked())
                     ImGui::TextDisabled("Learning the calibration... (%u/%u)", calibration.Readings(),
                                         DlssNrFollowGame::kWindow);
                 else
                     ImGui::TextDisabled("Calibration %+.2f EV against the game's exposure%s", calibration.OffsetEv(),
                                         followStatus.following ? "; following" : "; not following");
+
+                // The calibration is learned once per session; this learns it again.
+                if (ImGui::SmallButton("Re-calibrate##autoexposure"))
+                {
+                    DlssNrFollowGame::Instance().Reset();
+                    LOG_INFO("DLSS-NR automatic exposure: re-calibration requested");
+                }
+
+                HelpMarker("Learns the calibration against the game's exposure again, for example when it was"
+                           "\nlearned during a cutscene or a loading screen. Plain Automatic is used meanwhile (about 2 s)."
+                           "\nRe-calibrate in an ordinary daylight scene, not snow, night or indoors: the brightness"
+                           "\nlearned there is kept for the whole game.");
             }
 
             float protection = config->DlssNrAutoExposureShadowProtection.value_or_default();
@@ -1247,13 +1249,23 @@ void RenderMenu(Config* config, float menuResScale)
         if (ImGui::Combo("Model precision", &precisionChoice, precisions, IM_ARRAYSIZE(precisions)))
             config->DlssNrPrecision = precisionChoice == 1 ? 4u : 0u;
         HelpMarker("NVIDIA: original FP8 model (default), with some sensitive operations kept at higher precision.\nExperimental: this fork's FP8+NVFP4 hybrid for RTX 50 GPUs; output may differ slightly.");
+        // One setting per kernel set: the fp8 kernels (NVIDIA's DLL and fp8-based builds) and the plain FP16 kernels (used by some modified DLSS-NR DLLs).
+        // Only the one for the kernels actually running is used.
+        const char* kernelSet = DlssNrNative::VitKernelSet();
         bool vitReuse = config->DlssNrVitEvery.value_or_default() > 1;
-        if (ImGui::Checkbox("Reuse bottleneck every other frame", &vitReuse))
+        if (ImGui::Checkbox("Reuse bottleneck: FP8 kernels", &vitReuse))
             config->DlssNrVitEvery = vitReuse ? 2u : 1u;
         HelpMarker("Recomputes the model's coarsest stage (its 32x18 bottleneck) only every other frame and reuses the last result in between, "
                    "which saves roughly a tenth of the model's GPU time.\nThat stage changes slowly, so the picture usually barely differs, "
-                   "but fast camera motion can look slightly softer. Scene cuts always recompute. Applies immediately, NVIDIA's own model only.");
-        if (vitReuse)
+                   "but fast camera motion can look slightly softer. Scene cuts always recompute. With several passes, all passes compute on the same frame "
+                   "and all reuse on the next.\nOn by default. Applies immediately, NVIDIA's own model only.\n"
+                   "Used when the model runs NVIDIA's FP8 kernels (NVIDIA's DLL and FP8-based builds).");
+        bool vitReusePlain = config->DlssNrVitEveryPlain.value_or_default() > 1;
+        if (ImGui::Checkbox("Reuse bottleneck: plain FP16 kernels", &vitReusePlain))
+            config->DlssNrVitEveryPlain = vitReusePlain ? 2u : 1u;
+        HelpMarker("The same as above, used when the model runs the plain FP16 kernels (used by some modified DLSS-NR DLLs).\nOn by default.");
+        ImGui::Text("Kernel set in use: %s", kernelSet);
+        if (DlssNrNative::VitPlainKernels() ? vitReusePlain : vitReuse)
             ImGui::TextUnformatted(("Bottleneck reuse: " + DlssNrNative::VitStatus()).c_str());
         if (precisionChoice > 0)
         {

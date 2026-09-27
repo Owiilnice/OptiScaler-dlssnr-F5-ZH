@@ -8,7 +8,7 @@
 // log-average to middle grey (0.18) and RDR2 maps it to about 1.7, a steady 3.2 EV apart in gameplay (measured
 // 2026-09-25, -3.14..-3.27 over 70 s). So the game's exposure is not used as it is: the offset between the two is learned
 // here, once per session, and the base white point Automatic uses becomes the game's times that offset. The brightness
-// slider keeps its meaning (+4.3 EV is the same picture), and only the frame-to-frame movement is the game's.
+// slider keeps its meaning (the same EV is the same picture), and only the frame-to-frame movement is the game's.
 //
 // The offset is the median of log2(Automatic base white point / the game's) over kWindow readings, taken only while the
 // frame reads unexposed (DlssNr_AutoTrimDefault.h), and locked from then on. The meter ignores black tiles, so a

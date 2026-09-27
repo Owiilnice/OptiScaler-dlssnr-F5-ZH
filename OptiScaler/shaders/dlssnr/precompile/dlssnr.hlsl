@@ -876,9 +876,13 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint3 gr
     // black tile's log is clamped to -24 EV, so in the log-average it weighs like a tile 24 stops down:
     // RDR2's letterboxed cutscenes (19% of tiles exactly 0) pulled the reference ~4.6 EV down, the
     // knee then compressed every real tile, and the picture was exposed ~3 EV too bright. "Black" is
-    // relative -- 12 stops below the plain mean of all tiles -- because the buffer's units are the
-    // game's own. Black tiles lower that mean by at most their share of the area, never by orders of
-    // magnitude, and 12 stops down is far below any shadow or night sky the picture can show. When
+    // relative -- 12 stops below a reference mean -- because the buffer's units are the game's own. The
+    // reference is the mean of the tiles at or below 16x the plain mean of all tiles: a small, very
+    // bright area (the sun, a lamp) raises the plain mean and would push real deep shadows under the
+    // cutoff, so tiles that far above it are left out of the reference (not out of the metering); when
+    // nothing is left the plain mean is used. Black tiles lower the reference by at most their share of
+    // the area, never by orders of magnitude, and 12 stops down is far below any shadow or night sky the
+    // picture can show. ReportFrameStats (DlssNr_Dx12.cpp) applies the same rule. When
     // under 5% of the area is left (a black frame) no exposure is written: 0 reads as "no reading"
     // and the last good value is kept.
     if (gMode == 13)
@@ -913,9 +917,42 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint3 gr
 
         const float framePixels = gExposureReduce[0].y;
         const float plainMean = framePixels > 0.0 ? gExposureReduce[0].x / framePixels : 0.0;
-        const float blackLevel = plainMean * exp2(-12.0);
 
         // Every lane has read the result before the next reduction reuses the array.
+        GroupMemoryBarrierWithGroupSync();
+
+        // The black reference without the very bright tiles (see above).
+        const float brightCut = plainMean * 16.0;
+        float coreSum = 0.0;
+        float corePixels = 0.0;
+
+        [loop] for (uint indexR = lane; indexR < 4096u; indexR += 64u)
+        {
+            const uint txR = indexR & 63u;
+            const uint tyR = indexR >> 6u;
+            const float tileR = max(SanitizeFinite(gSource.Load(int3(txR, tyR, 0)).r, 0.0), 0.0);
+
+            if (tileR > brightCut)
+                continue;
+
+            const float pixelsR = (float) max(((txR + 1u) * srcW) / 64u - (txR * srcW) / 64u, 1u) *
+                                  (float) max(((tyR + 1u) * srcH) / 64u - (tyR * srcH) / 64u, 1u);
+            coreSum += tileR * pixelsR;
+            corePixels += pixelsR;
+        }
+
+        gExposureReduce[lane] = float4(coreSum, corePixels, 0.0, 0.0);
+        GroupMemoryBarrierWithGroupSync();
+        [unroll] for (uint strideR = 32u; strideR > 0u; strideR >>= 1u)
+        {
+            if (lane < strideR)
+                gExposureReduce[lane].xy += gExposureReduce[lane + strideR].xy;
+            GroupMemoryBarrierWithGroupSync();
+        }
+
+        const float coreMean = gExposureReduce[0].y > 0.0 ? gExposureReduce[0].x / gExposureReduce[0].y : plainMean;
+        const float blackLevel = coreMean * exp2(-12.0);
+
         GroupMemoryBarrierWithGroupSync();
 
         float weightedBufferLuma = 0.0;

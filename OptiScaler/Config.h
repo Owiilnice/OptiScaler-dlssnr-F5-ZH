@@ -268,7 +268,8 @@ class Config
     CustomOptional<bool> DlssNrDeferredDlss { false };
     CustomOptional<bool> DlssNrResidualFg { false };
     CustomOptional<uint32_t> DlssNrPrecision { 0 }; // 0 NVIDIA FP8 (default), 4 Experimental NVFP4 hybrid
-    CustomOptional<uint32_t> DlssNrVitEvery { 1 };  // NVIDIA model: compute the ViT bottleneck every N-th frame (1 = always, default; 2 = every other frame), reuse it in between
+    CustomOptional<uint32_t> DlssNrVitEvery { 2 };  // NVIDIA model: compute the ViT bottleneck every N-th frame (1 = always; 2 = every other frame, default), reuse it in between
+    CustomOptional<uint32_t> DlssNrVitEveryPlain { 2 }; // the same for the plain fp16 kernel set (used by some modified DLSS-NR DLLs); VitEvery is the fp8 set
     CustomOptional<bool> DlssNrResidualFgApproxCamera { false };
     // Toggles the pass in game. Unbound by default -- a key that does something unexpected is worse
     // than one that does nothing.
@@ -506,21 +507,23 @@ class Config
     // was a button the notice never mentioned -- and then by clearing, which silently undid a
     // setting the user had made. Both were attempts to stop an illegal state being REACHED. A single
     // choice cannot reach it: there is nothing to keep consistent, because there is only one value.
-    CustomOptional<uint32_t> DlssNrWhitePointSource { 1 };
+    // Default 3 (Automatic, at +1.5 EV): it needs nothing from the game; Game exposure left NBA 2K27 far too dark.
+    CustomOptional<uint32_t> DlssNrWhitePointSource { 3 };
 
     // OptiScaler-owned automatic exposure controls. When active, automatic exposure uses the
     // linear-HDR NR input. Finished-picture mode bypasses this calculation and keeps its own
     // display white-point override.
     // AutoExposureTrim is a multiplier on the white point (higher = darker model input). While unset (ini `auto`) the
-    // Trim used is chosen per game from the frame type (DlssNrAutoTrim::Effective, shaders/dlssnr/DlssNr_AutoTrimDefault.h):
-    // 0.25 (+4.3 EV) on an unexposed frame, 1.0 (+2.3 EV) on a pre-exposed one; the 5.0 below is only the menu's 0 EV
+    // Trim used is the default (DlssNrAutoTrim::Effective, shaders/dlssnr/DlssNr_AutoTrimDefault.h):
+    // 1.77 (+1.5 EV) for every game; the 5.0 below is only the menu's 0 EV
     // point. The menu shows it as "Model input brightness" in stops around 5x: EV = -log2(trim / 5), so 0 EV = 5x, + is brighter.
     // AutoExposureShadowProtection is the menu's "Ignore bright highlights" (percent).
     CustomOptional<float> DlssNrAutoExposureTrim { 5.0f };
     CustomOptional<float> DlssNrAutoExposureShadowProtection { 100.0f };
-    // On a frame the game has not exposed yet (and that supplies its exposure), Automatic follows the game's own
-    // exposure times a calibration learned against Automatic's meter (Vulkan: a few frames behind). See DlssNr_FollowGame.h.
-    CustomOptional<bool> DlssNrAutoExposureFollowGame { true };
+    // Automatic follows the game's own exposure times a calibration learned against Automatic's meter (Vulkan: a few
+    // frames behind). See DlssNr_FollowGame.h. Unset (auto) = on for a known unexposed game (DlssNr_AutoTrimDefault.h
+    // kUnexposedGames), off otherwise; a saved true or false is kept as it is.
+    CustomOptional<bool, NoDefault> DlssNrAutoExposureFollowGame;
 
     // Base-white-point-dependent Trim calibration tables, serialized as baseWhitePoint:trim pairs. Ini-only: the
     // menu no longer edits them, but a table already in the ini still applies (and disables the Trim slider).
@@ -931,6 +934,7 @@ class Config
     CustomOptional<int> FGHUDLimit { 1 };
     CustomOptional<bool> FGHUDFixExtended { false };
     CustomOptional<bool> FGImmediateCapture { false };
+    CustomOptional<bool> FGHudfixPersistentBindings { true };
     CustomOptional<bool> FGDontUseSwapchainBuffers { false };
     CustomOptional<bool> FGRelaxedResolutionCheck { false };
     CustomOptional<bool> FGHudfixDisableRTV { false };

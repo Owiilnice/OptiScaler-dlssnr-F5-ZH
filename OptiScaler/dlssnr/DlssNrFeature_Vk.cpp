@@ -14,6 +14,7 @@
 #include <shaders/dlssnr/DlssNr_TrimAnchors.h>
 #include <shaders/dlssnr/DlssNr_AutoTrimDefault.h>
 #include <shaders/dlssnr/DlssNr_FollowGame.h>
+#include <dlssnr/DlssNr_GameDefaults.h>
 #include <shaders/output_scaling/OS_Vk.h>
 #include <shaders/sgsr1/SGSR1_Vk.h>
 
@@ -696,12 +697,7 @@ static void EvaluateAtSeamVk(VkCommandBuffer cmdBuffer, NVSDK_NGX_Parameter* par
                     g_vk.autoExposureValue = measured;
                     g_vk.autoExposurePreExposure = g_vk.meterExposurePreExposure[readSlot];
 
-                    if (DlssNrAutoTrim::Instance().Feed(g_vk.autoExposurePreExposure / g_vk.autoExposureValue))
-                        LOG_INFO("DLSS-NR automatic exposure: {} frame (base white point {:.3g}) -> default Trim {} ({})",
-                                 DlssNrAutoTrim::Instance().Get() == DlssNrAutoTrim::Verdict::Unexposed ? "unexposed"
-                                                                                                      : "pre-exposed",
-                                 DlssNrAutoTrim::Instance().DecidedOn(), DlssNrAutoTrim::Instance().DefaultTrim(),
-                                 DlssNrAutoTrim::Instance().Get() == DlssNrAutoTrim::Verdict::Unexposed ? "+4.3 EV" : "+2.3 EV");
+                    DlssNr::ReportAutoExposureDefaults();
 
                     // The game's exposure from the same frame. Believed on the same terms as Game exposure's own
                     // courier: a read through a layout the game did not leave the image in fails here.
@@ -717,7 +713,7 @@ static void EvaluateAtSeamVk(VkCommandBuffer cmdBuffer, NVSDK_NGX_Parameter* par
                             g_vk.pairPreExposure = g_vk.meterExposurePreExposure[readSlot];
                             g_vk.pairValidAt = g_vk.meterFrames;
 
-                            if (DlssNrAutoTrim::Instance().Get() == DlssNrAutoTrim::Verdict::Unexposed &&
+                            if (DlssNr::FollowGameOn(*Config::Instance()) &&
                                 DlssNrFollowGame::Instance().Feed(g_vk.autoExposurePreExposure / g_vk.autoExposureValue,
                                                                   g_vk.pairPreExposure / g_vk.pairGameExposure))
                                 LOG_INFO("DLSS-NR automatic exposure: calibrated against the game's own exposure: "
@@ -734,6 +730,24 @@ static void EvaluateAtSeamVk(VkCommandBuffer cmdBuffer, NVSDK_NGX_Parameter* par
                                      "readings (last {})",
                                      g_vk.pairValid, g_vk.pairReads, pairedGame);
                         }
+                    }
+
+                    // Diagnostic (ini FrameStats), the Vulkan counterpart of D3D12's frame stats line for the frame
+                    // type: every ~2 s Automatic's base white point, and the game's beside it while they are paired.
+                    static unsigned statsReadings = 0;
+
+                    if (cfg.DlssNrFrameStats.value_or_default() && ++statsReadings % 120u == 0u)
+                    {
+                        const float autoBase = g_vk.autoExposurePreExposure / g_vk.autoExposureValue;
+                        const bool paired = g_vk.meterPairHasGame[readSlot] && g_vk.pairGameExposure > 0.0f;
+                        const float gameBase = paired ? g_vk.pairPreExposure / g_vk.pairGameExposure : 0.0f;
+                        LOG_INFO("DLSS-NR frame stats (Vulkan): Automatic base white point {:.4g}; game exposure {} "
+                                 "(base white point {:.4g}, Automatic/game {:.3g}{}); known unexposed game: {}, "
+                                 "following the game's exposure: {}",
+                                 autoBase, paired ? g_vk.pairGameExposure : 0.0f, gameBase,
+                                 paired && gameBase > 0.0f ? autoBase / gameBase : 0.0f,
+                                 paired ? "" : "; read only while following", DlssNr::KnownUnexposedGame() ? "yes" : "no",
+                                 DlssNr::FollowGameOn(cfg) ? "on" : "off");
                     }
                 }
             }
@@ -1143,12 +1157,11 @@ static void EvaluateAtSeamVk(VkCommandBuffer cmdBuffer, NVSDK_NGX_Parameter* par
         g_vk.pairValidAt = 0;
     }
 
-    // Following the game's exposure (DlssNr_FollowGame.h): an unexposed frame, the calibration locked, and a valid
-    // reading of the game's exposure no more than eight readbacks old. Otherwise Automatic's own value stands.
+    // Following the game's exposure (DlssNr_FollowGame.h): on (DlssNr_GameDefaults.h), the calibration locked, and a
+    // valid reading of the game's exposure no more than eight readbacks old. Otherwise Automatic's own value stands.
     {
         const bool follow = requestedWhitePointSource == 3 && linearHdr && exposure != nullptr &&
-                            cfg.DlssNrAutoExposureFollowGame.value_or_default() &&
-                            DlssNrAutoTrim::Instance().Get() == DlssNrAutoTrim::Verdict::Unexposed &&
+                            DlssNr::FollowGameOn(cfg) &&
                             DlssNrFollowGame::Instance().Locked() && g_vk.pairGameExposure > 1e-8f &&
                             g_vk.meterFrames - g_vk.pairValidAt <= 8;
 
@@ -1179,7 +1192,7 @@ static void EvaluateAtSeamVk(VkCommandBuffer cmdBuffer, NVSDK_NGX_Parameter* par
                 ? g_vk.pairPreExposure / g_vk.pairGameExposure * DlssNrFollowGame::Instance().Scale()
                 : g_vk.autoExposurePreExposure / g_vk.autoExposureValue;
         const auto anchors = DlssNrTrim::Parse(cfg.DlssNrAutoExposureTrimAnchors.value_or_default());
-        const float trim = DlssNrTrim::TrimForKey(baseWhitePoint, DlssNrAutoTrim::Effective(cfg.DlssNrAutoExposureTrim),
+        const float trim = DlssNrTrim::TrimForKey(baseWhitePoint, DlssNr::AutoTrimEffective(cfg),
                                                   anchors, cfg.DlssNrAutoExposureTrimPreview.value_or_default());
         whitePoint = std::clamp(baseWhitePoint * trim, 0.01f, 4096.0f);
         debugWhitePoint = std::clamp(baseWhitePoint, 0.01f, 4096.0f);
@@ -1233,7 +1246,7 @@ static void EvaluateAtSeamVk(VkCommandBuffer cmdBuffer, NVSDK_NGX_Parameter* par
                                                          : cfg.DlssNrGameExposureTrimAnchors.value_or_default());
         encode.PreExposure = g_vk.gamePreExposure;
         DlssNrTrim::FillConstants(encode,
-                                  automatic ? DlssNrAutoTrim::Effective(cfg.DlssNrAutoExposureTrim)
+                                  automatic ? DlssNr::AutoTrimEffective(cfg)
                                             : cfg.DlssNrWhitePointTrim.value_or_default(),
                                   anchors,
                                   automatic ? cfg.DlssNrAutoExposureTrimPreview.value_or_default()
@@ -1338,13 +1351,12 @@ static void EvaluateAtSeamVk(VkCommandBuffer cmdBuffer, NVSDK_NGX_Parameter* par
 
                     // The game's exposure beside Automatic's, for following it (DlssNr_FollowGame.h). The game's image
                     // is read through the same layout guess Game exposure's courier uses, so it is only touched where
-                    // it can matter: an unexposed frame, with the option on. The meter's tiles are reduced already.
+                    // it can matter: while following is on. The meter's tiles are reduced already.
                     g_vk.meterPairHasGame[slot] = false;
 
                     if (exposure != nullptr && exposure->Type == NVSDK_NGX_RESOURCE_VK_TYPE_VK_IMAGEVIEW &&
                         exposure->Resource.ImageViewInfo.ImageView != VK_NULL_HANDLE &&
-                        cfg.DlssNrAutoExposureFollowGame.value_or_default() &&
-                        DlssNrAutoTrim::Instance().Get() == DlssNrAutoTrim::Verdict::Unexposed)
+                        DlssNr::FollowGameOn(cfg))
                     {
                         DlssNrConstants courier {};
                         courier.Mode = DlssNrMode_Meter;

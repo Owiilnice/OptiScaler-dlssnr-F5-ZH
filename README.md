@@ -4,7 +4,7 @@ A game mod that uses NVIDIA AI to change lighting, detail and colour. You can ad
 
 This is an experimental community version of OptiScaler. Results and game support vary.
 
-**[Download the latest version](https://github.com/janblade/OptiScaler-DLSSNR-PreSR-Multipass/releases/latest)** · [Setup guide](INSTALL-DLSSNR.md) · [What's new](https://github.com/janblade/OptiScaler-DLSSNR-PreSR-Multipass/releases)
+**[Download the latest version](https://github.com/janblade/OptiScaler-F5-DLSSNR-Multipass/releases/latest)** · [Setup guide](INSTALL-DLSSNR.md) · [What's new](https://github.com/janblade/OptiScaler-F5-DLSSNR-Multipass/releases)
 
 ## What you can change
 
@@ -37,7 +37,7 @@ See the [setup guide](INSTALL-DLSSNR.md) for game-specific steps and troubleshoo
 - The optional **hybrid mode** is for RTX 50 GPUs. Its files are included. Loading may pause the game and look like a freeze; please wait.
 - Avoid anti-cheat-protected multiplayer games.
 
-For frame generation, see the [setup notes](docs/DLSS-FRAME-GENERATION.md). For bugs, [open an issue](https://github.com/janblade/OptiScaler-DLSSNR-PreSR-Multipass/issues) with your game, GPU, settings and `OptiScaler.log`.
+For frame generation, see the [setup notes](docs/DLSS-FRAME-GENERATION.md). For bugs, [open an issue](https://github.com/janblade/OptiScaler-F5-DLSSNR-Multipass/issues) with your game, GPU, settings and `OptiScaler.log`.
 
 ## Credits
 
