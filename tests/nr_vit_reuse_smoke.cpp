@@ -31,12 +31,13 @@ struct Result
     bool wellFormed = true;
 };
 
-static Result Eval(Filter& f, const void* feature, bool reset, unsigned every, const Seq& seq = kEval, long long slot = -1)
+static Result Eval(Filter& f, const void* feature, bool reset, unsigned every, const Seq& seq = kEval, long long slot = -1,
+                   KernelSet set = KernelSet::Fp8, unsigned everyPlain = 0)
 {
     Result r;
-    f.Begin(feature, reset, every, slot);
+    f.Begin(feature, reset, every, slot, everyPlain);
     for (Role role : seq)
-        r.dropped.push_back(f.Drop(role));
+        r.dropped.push_back(f.Drop(role, set));
     r.wellFormed = f.End();
     return r;
 }
@@ -68,6 +69,37 @@ int main()
     CHECK(RoleOf("cc_cb_clear") == Role::None);
     CHECK(RoleOf("cc_vit_ffn_expand") == Role::None); // the 2D ViT kernels are not the bottleneck range
     CHECK(RoleOf(nullptr) == Role::None);
+
+    // the kernel set comes from the name: the fp8 kernels carry the _fp8 suffix
+    CHECK(SetOf("cc_vit_1d_repack_2d_to_1d_fp8") == KernelSet::Fp8);
+    CHECK(SetOf("cc_vit_1d_repack_2d_to_1d") == KernelSet::Plain);
+    CHECK(SetOf("cc_vit_1d_fp8_projection") == KernelSet::Plain); // only a suffix counts
+    CHECK(SetOf(nullptr) == KernelSet::Unknown);
+
+    { // each kernel set follows its own rate: fp8 at 2, plain at 1
+        Filter f;
+        CHECK(f.LastSet() == KernelSet::Unknown);
+        for (int i = 0; i < 4; ++i)
+            CHECK(Kept(Eval(f, &a, false, 2, kEval, -1, KernelSet::Plain, 1)));
+        CHECK(f.LastSet() == KernelSet::Plain);
+        CHECK(Kept(Eval(f, &b, false, 2, kEval, -1, KernelSet::Fp8, 1)));
+        CHECK(Dropped(Eval(f, &b, false, 2, kEval, -1, KernelSet::Fp8, 1)));
+        CHECK(f.LastSet() == KernelSet::Fp8);
+    }
+
+    { // and the other way round: plain at 2 reuses, fp8 at 1 never does
+        Filter f;
+        CHECK(Kept(Eval(f, &a, false, 1, kEval, -1, KernelSet::Plain, 2)));
+        CHECK(Dropped(Eval(f, &a, false, 1, kEval, -1, KernelSet::Plain, 2)));
+        CHECK(Kept(Eval(f, &b, false, 1, kEval, -1, KernelSet::Fp8, 2)));
+        CHECK(Kept(Eval(f, &b, false, 1, kEval, -1, KernelSet::Fp8, 2)));
+    }
+
+    { // everyPlain 0 = the same rate as fp8 (callers that do not tell the sets apart)
+        Filter f;
+        CHECK(Kept(Eval(f, &a, false, 2, kEval, -1, KernelSet::Plain)));
+        CHECK(Dropped(Eval(f, &a, false, 2, kEval, -1, KernelSet::Plain)));
+    }
 
     { // outside an evaluation nothing is touched, whatever the setting
         Filter f;
