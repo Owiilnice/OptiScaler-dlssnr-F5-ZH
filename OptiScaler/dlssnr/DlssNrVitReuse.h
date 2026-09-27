@@ -53,19 +53,40 @@ inline Role RoleOf(const char* name)
     return Role::Inner;
 }
 
+// Which kernel set a kernel belongs to: the fp8 ones carry the _fp8 suffix, the plain fp16 ones (used by some modified DLSS-NR DLLs) do not.
+// Each set has its own Reuse setting.
+enum class KernelSet : uint8_t
+{
+    Unknown = 0, // no ViT run seen yet
+    Fp8,
+    Plain,
+};
+
+inline KernelSet SetOf(const char* name)
+{
+    if (name == nullptr)
+        return KernelSet::Unknown;
+
+    constexpr char suffix[] = "_fp8";
+    constexpr size_t suffixLen = sizeof(suffix) - 1;
+    const size_t len = strlen(name);
+    return len >= suffixLen && strcmp(name + len - suffixLen, suffix) == 0 ? KernelSet::Fp8 : KernelSet::Plain;
+}
+
 // Feed it the launches of one model evaluation, in order, between Begin and End. One Filter serves every feature (every
 // pass); the evaluation in progress belongs to the calling thread, so launches from any other thread pass untouched.
 class Filter
 {
   public:
-    // Start of one model evaluation of `feature`. `every` is how often the run is computed (1 = always); `reset` forces it.
+    // Start of one model evaluation of `feature`. `every` is how often the run is computed (1 = always) for the fp8 kernel set,
+    // `everyPlain` for the plain fp16 one (0 = the same as `every`); the run's first launch tells which set it is. `reset` forces it.
     // `slot` (the frame number; negative = none) anchors the cycle to the frame: a pass computes when slot % every == 0.
     // Every pass of a frame gets the same slot, so all passes compute on the same frame and all reuse on the next. Offsetting
     // each pass by its index (v0.1.19 pre-release) flickered on camera motion at 3 passes: a pass then built its bottleneck
     // on a pass that was reusing, so the picture used data two frames old, like every = 3.
     // The cycle is anchored to the frame, so a pass that had to start over (reset, lost cache) falls back into its own
     // phase on the next due frame. A pass never goes longer than every - 1 reused evaluations, anchored or not.
-    void Begin(const void* feature, bool reset, unsigned every, long long slot = -1)
+    void Begin(const void* feature, bool reset, unsigned every, long long slot = -1, unsigned everyPlain = 0)
     {
         Ctx& c = ctx();
         c = Ctx {};
@@ -73,13 +94,15 @@ class Filter
         c.key = feature;
         c.reset = reset;
         c.every = every < 1 ? 1 : every;
+        c.everyPlain = everyPlain < 1 ? c.every : everyPlain;
         c.slot = slot;
     }
 
     bool Evaluating() const { return ctx().active; }
 
-    // True when this launch is to be dropped. Must be called for every launch of the evaluation, in order.
-    bool Drop(Role role)
+    // True when this launch is to be dropped. Must be called for every launch of the evaluation, in order. `set` is the launch's
+    // kernel set; only the run's first launch uses it.
+    bool Drop(Role role, KernelSet set = KernelSet::Fp8)
     {
         Ctx& c = ctx();
 
@@ -97,11 +120,13 @@ class Filter
             }
 
             c.inRange = true;
+            lastSet_ = set;
 
+            const unsigned every = set == KernelSet::Plain ? c.everyPlain : c.every;
             std::lock_guard<std::mutex> lock(mutex_);
             Entry& e = entries_[c.key];
-            const bool due = c.slot >= 0 && c.slot % c.every == 0;
-            const bool skip = !disabled_ && c.every > 1 && e.valid && !c.reset && !due && e.skips + 1 < c.every;
+            const bool due = c.slot >= 0 && c.slot % every == 0;
+            const bool skip = !disabled_ && every > 1 && e.valid && !c.reset && !due && e.skips + 1 < every;
 
             if (skip)
             {
@@ -182,6 +207,7 @@ class Filter
     }
 
     bool Disabled() const { return disabled_; }
+    KernelSet LastSet() const { return lastSet_; } // the kernel set of the last ViT run seen
     unsigned long long Computed() const { return computed_; }
     unsigned long long Reused() const { return reused_; }
 
@@ -210,6 +236,7 @@ class Filter
         const void* key = nullptr;
         bool reset = false;
         unsigned every = 1;
+        unsigned everyPlain = 1;
         long long slot = -1;
         bool inRange = false;
         bool skipping = false;
@@ -225,6 +252,7 @@ class Filter
     std::mutex mutex_;
     std::unordered_map<const void*, Entry> entries_;
     std::atomic<bool> disabled_ { false };
+    std::atomic<KernelSet> lastSet_ { KernelSet::Unknown };
     std::atomic<unsigned long long> computed_ { 0 };
     std::atomic<unsigned long long> reused_ { 0 };
 };

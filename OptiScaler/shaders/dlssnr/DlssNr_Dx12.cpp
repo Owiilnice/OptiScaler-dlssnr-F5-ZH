@@ -3397,7 +3397,7 @@ void DlssNr_Dx12::Dispatch(ID3D12GraphicsCommandList* cmdList, ID3D12Resource* c
         // ViT reuse of the NVIDIA model: tell the NvAPI wrapper which feature this is, whether it starts over, how often to compute the bottleneck,
         // and the frame slot (successfulDispatches counts NR frames and is constant across one frame's passes, so all passes compute on the
         // same frame and all reuse on the next; see DlssNrVitReuse.h for why the passes must not be offset)
-        DlssNrNative::BeginEvaluate(passFeature, passReset, cfg.DlssNrVitEvery.value_or_default(),
+        DlssNrNative::BeginEvaluate(passFeature, passReset, cfg.DlssNrVitEvery.value_or_default(), cfg.DlssNrVitEveryPlain.value_or_default(),
                                     (long long) (g_nr.successfulDispatches & 0x3FFFFFFFFFFFFFFFull), cmdList,
                                     cfg.DlssNrKernelProfile.value_or_default());
         result = g_nr.evaluate(

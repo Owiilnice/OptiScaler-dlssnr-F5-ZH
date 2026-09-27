@@ -213,6 +213,7 @@ static void ApplyPassPreset(Config* config, unsigned int passes)
     config->DlssNrEnabled = true;
     config->DlssNrPrecision = 0u; // NVIDIA (FP8)
     config->DlssNrVitEvery = 2u; // Reuse bottleneck on, the default
+    config->DlssNrVitEveryPlain = 2u; // the same for the plain FP16 kernels
     config->DlssNrApplyModel = true;
     config->DlssNrUnlockPasses = false;
     config->DlssNrPasses = passes;
@@ -1248,14 +1249,23 @@ void RenderMenu(Config* config, float menuResScale)
         if (ImGui::Combo("Model precision", &precisionChoice, precisions, IM_ARRAYSIZE(precisions)))
             config->DlssNrPrecision = precisionChoice == 1 ? 4u : 0u;
         HelpMarker("NVIDIA: original FP8 model (default), with some sensitive operations kept at higher precision.\nExperimental: this fork's FP8+NVFP4 hybrid for RTX 50 GPUs; output may differ slightly.");
+        // One setting per kernel set: the fp8 kernels (NVIDIA's DLL and fp8-based builds) and the plain FP16 kernels (used by some modified DLSS-NR DLLs).
+        // Only the one for the kernels actually running is used.
+        const char* kernelSet = DlssNrNative::VitKernelSet();
         bool vitReuse = config->DlssNrVitEvery.value_or_default() > 1;
-        if (ImGui::Checkbox("Reuse bottleneck every other frame", &vitReuse))
+        if (ImGui::Checkbox("Reuse bottleneck: FP8 kernels", &vitReuse))
             config->DlssNrVitEvery = vitReuse ? 2u : 1u;
         HelpMarker("Recomputes the model's coarsest stage (its 32x18 bottleneck) only every other frame and reuses the last result in between, "
                    "which saves roughly a tenth of the model's GPU time.\nThat stage changes slowly, so the picture usually barely differs, "
                    "but fast camera motion can look slightly softer. Scene cuts always recompute. With several passes, all passes compute on the same frame "
-                   "and all reuse on the next.\nOn by default. Applies immediately, NVIDIA's own model only.");
-        if (vitReuse)
+                   "and all reuse on the next.\nOn by default. Applies immediately, NVIDIA's own model only.\n"
+                   "Used when the model runs NVIDIA's FP8 kernels (NVIDIA's DLL and FP8-based builds).");
+        bool vitReusePlain = config->DlssNrVitEveryPlain.value_or_default() > 1;
+        if (ImGui::Checkbox("Reuse bottleneck: plain FP16 kernels", &vitReusePlain))
+            config->DlssNrVitEveryPlain = vitReusePlain ? 2u : 1u;
+        HelpMarker("The same as above, used when the model runs the plain FP16 kernels (used by some modified DLSS-NR DLLs).\nOn by default.");
+        ImGui::Text("Kernel set in use: %s", kernelSet);
+        if (std::strcmp(kernelSet, "plain FP16") == 0 ? vitReusePlain : vitReuse)
             ImGui::TextUnformatted(("Bottleneck reuse: " + DlssNrNative::VitStatus()).c_str());
         if (precisionChoice > 0)
         {
