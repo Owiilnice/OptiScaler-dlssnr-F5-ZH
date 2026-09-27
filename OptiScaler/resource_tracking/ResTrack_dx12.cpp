@@ -113,14 +113,37 @@ static PFN_ClearState o_ClearState = nullptr;
 // installed by HookLateNrQueue only when NR asks for them.
 typedef void(STDMETHODCALLTYPE* PFN_ExecuteCommandLists)(ID3D12CommandQueue* This, UINT NumCommandLists,
                                                          ID3D12CommandList* const* ppCommandLists);
-using PFN_LateReset = HRESULT(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, ID3D12CommandAllocator*, ID3D12PipelineState*);
+using PFN_LateReset = HRESULT(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, ID3D12CommandAllocator*,
+                                                  ID3D12PipelineState*);
 static PFN_LateReset o_LateReset = nullptr;
+// True when hkLateReset went on after the tracker's hkReset (the usual order: the tracker hooks at device creation,
+// NR later). See DetachLateReset.
+static bool lateResetOnTop = false;
 static HRESULT STDMETHODCALLTYPE hkLateReset(ID3D12GraphicsCommandList* cmd, ID3D12CommandAllocator* allocator,
                                              ID3D12PipelineState* pipeline)
 {
     const auto result = o_LateReset(cmd, allocator, pipeline);
-    if (SUCCEEDED(result)) DlssNr::FinishedPictureResetCommandList(cmd);
+    if (SUCCEEDED(result))
+        DlssNr::FinishedPictureResetCommandList(cmd);
     return result;
+}
+
+// hkLateReset and the tracker's hkReset detour the same function. Detours puts a hook's saved bytes back on detach,
+// so the two have to come off in reverse install order, each in its own transaction: the release functions call this
+// before their own detach when hkLateReset went on last, and after it otherwise.
+static void DetachLateReset()
+{
+    if (o_LateReset == nullptr)
+        return;
+
+    DetourTransactionBegin();
+    DetourUpdateThread(GetCurrentThread());
+    DetourDetach(&(PVOID&) o_LateReset, hkLateReset);
+
+    if (DetourTransactionCommit() == NO_ERROR)
+        o_LateReset = nullptr;
+    else
+        LOG_ERROR("Failed to unhook the DLSS-NR command list Reset");
 }
 
 static PFN_ExecuteCommandLists o_ExecuteCommandLists = nullptr;
@@ -750,6 +773,7 @@ void ResTrack_Dx12::hkExecuteCommandLists(ID3D12CommandQueue* This, UINT NumComm
     o_ExecuteCommandLists(This, NumCommandLists, ppCommandLists);
     DlssNr::FinishedPictureSubmitted(This, NumCommandLists, ppCommandLists);
 }
+
 #pragma region Heap hooks
 
 static ULONG STDMETHODCALLTYPE hkHeapRelease(ID3D12DescriptorHeap* This)
@@ -2594,6 +2618,10 @@ void ResTrack_Dx12::HookCommandList(ID3D12Device* InDevice)
                 {
                     _bindingTrackingEnabled.store(persistentBindings, std::memory_order_release);
                 }
+
+                // hkReset now sits on top of an already installed hkLateReset
+                if (detourResult == NO_ERROR && o_Reset != nullptr && o_LateReset != nullptr)
+                    lateResetOnTop = false;
             }
 
             commandList->Close();
@@ -2610,20 +2638,28 @@ void ResTrack_Dx12::HookLateNrQueue(ID3D12Device* device)
     static std::mutex hookMutex;
     std::lock_guard<std::mutex> lock(hookMutex);
     HookToQueue(device);
-    if (o_LateReset) return;
+    if (o_LateReset)
+        return;
     ID3D12CommandAllocator* allocator = nullptr;
     ID3D12GraphicsCommandList* cmd = nullptr;
     if (SUCCEEDED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator))))
     {
-        if (SUCCEEDED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&cmd))))
+        if (SUCCEEDED(
+                device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, nullptr, IID_PPV_ARGS(&cmd))))
         {
             ID3D12GraphicsCommandList* real = nullptr;
-            if (!CheckForRealObject(__FUNCTION__, cmd, (IUnknown**)&real)) real = cmd;
-            o_LateReset = (PFN_LateReset)(*(void***)real)[10];
+            if (!CheckForRealObject(__FUNCTION__, cmd, (IUnknown**) &real))
+                real = cmd;
+
+            o_LateReset = (PFN_LateReset) (*(void***) real)[10];
             DetourTransactionBegin();
             DetourUpdateThread(GetCurrentThread());
-            DetourAttach(&(PVOID&)o_LateReset, hkLateReset);
-            if (DetourTransactionCommit() != NO_ERROR) o_LateReset = nullptr;
+            DetourAttach(&(PVOID&) o_LateReset, hkLateReset);
+
+            if (DetourTransactionCommit() != NO_ERROR)
+                o_LateReset = nullptr;
+            else
+                lateResetOnTop = true;
             cmd->Close();
             cmd->Release();
         }
@@ -2784,6 +2820,9 @@ void ResTrack_Dx12::ReleaseDeviceHooks()
 {
     LOG_DEBUG("");
 
+    if (lateResetOnTop)
+        DetachLateReset();
+
     DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread());
 
@@ -2829,8 +2868,6 @@ void ResTrack_Dx12::ReleaseDeviceHooks()
     if (o_Dispatch != nullptr)
         DetourDetach(&(PVOID&) o_Dispatch, hkDispatch);
 
-    if (o_LateReset != nullptr)
-        DetourDetach(&(PVOID&) o_LateReset, hkLateReset);
     auto detourResult = DetourTransactionCommit();
     if (detourResult != NO_ERROR)
     {
@@ -2855,16 +2892,20 @@ void ResTrack_Dx12::ReleaseDeviceHooks()
         o_DrawIndexedInstanced = nullptr;
         o_DrawInstanced = nullptr;
         o_Dispatch = nullptr;
-        o_LateReset = nullptr;
 
         _bindingTrackingEnabled.store(false, std::memory_order_release);
         ClearBindingStates();
     }
+
+    DetachLateReset();
 }
 
 void ResTrack_Dx12::ReleaseHooks()
 {
     LOG_DEBUG("");
+
+    if (lateResetOnTop)
+        DetachLateReset();
 
     DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread());
@@ -2918,8 +2959,6 @@ void ResTrack_Dx12::ReleaseHooks()
     if (o_Dispatch != nullptr)
         DetourDetach(&(PVOID&) o_Dispatch, hkDispatch);
 
-    if (o_LateReset != nullptr)
-        DetourDetach(&(PVOID&) o_LateReset, hkLateReset);
     auto detourResult = DetourTransactionCommit();
     if (detourResult != NO_ERROR)
     {
@@ -2935,12 +2974,13 @@ void ResTrack_Dx12::ReleaseHooks()
         o_DrawIndexedInstanced = nullptr;
         o_DrawInstanced = nullptr;
         o_Dispatch = nullptr;
-        o_LateReset = nullptr;
 
         _bindingTrackingEnabled.store(false, std::memory_order_release);
 
         ClearBindingStates();
     }
+
+    DetachLateReset();
 }
 
 void ResTrack_Dx12::ClearPossibleHudless()

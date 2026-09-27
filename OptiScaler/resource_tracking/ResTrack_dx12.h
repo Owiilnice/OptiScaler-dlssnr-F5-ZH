@@ -734,6 +734,11 @@ class ResTrack_Dx12
         return (addr >> 4) % SHARD_COUNT;
     }
 
+    // The queue submit hook DLSS-NR's finished-picture path needs (installed by HookLateNrQueue).
+    static void HookToQueue(ID3D12Device* InDevice);
+    static void hkExecuteCommandLists(ID3D12CommandQueue* This, UINT NumCommandLists,
+                                      ID3D12CommandList* const* ppCommandLists);
+
   public:
     static void RegisterRootSignature(ID3D12RootSignature* rootSignature,
                                       const D3D12_VERSIONED_ROOT_SIGNATURE_DESC* desc);
@@ -744,10 +749,6 @@ class ResTrack_Dx12
 
     static void HookDevice(ID3D12Device* device);
     static void HookLateNrQueue(ID3D12Device* device);
-    // The queue submit hook DLSS-NR's finished-picture path needs (installed by HookLateNrQueue).
-    static void HookToQueue(ID3D12Device* InDevice);
-    static void hkExecuteCommandLists(ID3D12CommandQueue* This, UINT NumCommandLists,
-                                      ID3D12CommandList* const* ppCommandLists);
     static void ReleaseHooks();
     static void ReleaseDeviceHooks();
     static void ClearPossibleHudless();
