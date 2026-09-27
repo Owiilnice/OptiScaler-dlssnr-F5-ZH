@@ -5,29 +5,34 @@
 // One NR evaluation launches its kernels on the game's command list through NvAPI. The ViT bottleneck (blocks 31-38, the
 // coarsest and most stable level of the network) is one contiguous run of those launches, from cc_vit_1d_repack_2d_to_1d
 // through cc_vit_1d_repack_1d_to_2d, and about a fifth of the evaluation. Leaving that run out on some frames leaves the
-// previous frame's result in its output buffer, which the next kernel reads.
+// previous frame's result in its output buffer, which the next kernel reads (on the plain set: in its 1-D result, see below).
 //
 // Why dropping the run is safe (checked on a real capture, fp8 kernels): the run's sync counters are referenced by no kernel outside
 // it, so nothing that is kept can wait on something that was dropped; and its output buffer is written only by its last kernel.
 // Anything that does not look like that turns the feature off for the session instead of guessing.
-// The caller records a UAV barrier where a skipped run ends, so the kernels on either side of the gap cannot overlap on the GPU.
+// The caller records a UAV barrier where a skipped run ends (before its kept last kernel on the plain set, see below), so the kernels
+// on either side of the gap cannot overlap on the GPU.
 //
 // The plain fp16 kernels (used by some modified DLSS-NR DLLs) lay the network's memory out differently: the run's 2-D output, which the
 // decoder reads, shares memory with an early full-size activation that is rewritten every evaluation. Only the run's 1-D result, the
 // input of its last kernel (repack_1d_to_2d), keeps its own memory. So on that set a skipped run keeps its last kernel, which rebuilds
-// the 2-D output from the kept 1-D result. The fp8 set drops it: there the 2-D output keeps its own memory, and nothing says the 1-D
-// result does.
+// the 2-D output from the kept 1-D result. That kernel takes only its source, its destination and two sizes (checked on a plain
+// capture): it waits on no sync counter, so it can run without the rest of the run. The fp8 set drops it: there the 2-D output keeps its
+// own memory, and nothing says the 1-D result does.
 //
 // This header is only the decision: which launch of an evaluation is dropped. It knows nothing about NvAPI, so tests/nr_vit_reuse_smoke.cpp
 // exercises it on the host.
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace DlssNrVitReuse
 {
@@ -191,6 +196,35 @@ class Filter
         const bool gap = c.gap;
         c.gap = false;
         return gap;
+    }
+
+    // One launch call of the evaluation: `kept` gets the launches that go out, in order. `gap` is where in `kept` the barrier goes
+    // (the last launch of a skipped run was there, or is there when it is kept), or -1 when that launch was not in this call.
+    // True when the call needs that treatment (something dropped, or a barrier to record); false = launch the call unchanged.
+    // `roleOf(launch)` gives a launch's std::pair<Role, KernelSet>.
+    template <class T, class RoleOfLaunch>
+    bool Split(const T* launches, size_t count, RoleOfLaunch roleOf, std::vector<T>& kept, std::ptrdiff_t& gap)
+    {
+        bool any = false;
+
+        for (size_t i = 0; i < count; ++i)
+        {
+            const std::pair<Role, KernelSet> rs = roleOf(launches[i]);
+            const bool drop = Drop(rs.first, rs.second);
+
+            if (TakeGap())
+            {
+                any = true;
+                gap = (std::ptrdiff_t) kept.size();
+            }
+
+            if (drop)
+                any = true;
+            else
+                kept.push_back(launches[i]);
+        }
+
+        return any;
     }
 
     // End of the evaluation. False when what was launched did not look like the expected order; the feature is then off
