@@ -140,12 +140,15 @@ bool Supported(const void*data,unsigned bytes){if(bytes!=3202680||!data)return f
 NvAPI_Status __cdecl CreateModule(ID3D12Device*d,const void*b,NvU32 n,NVDX_ObjectHandle*out){auto&s=S();std::lock_guard<std::recursive_mutex>apiGuard(s.mutex);auto rc=s.createModule(d,b,n,out);if(rc==0){std::lock_guard<std::recursive_mutex>g(s.mutex);s.modules[*out]=Supported(b,n);s.active=false;}return rc;}
 NvAPI_Status __cdecl CreateFunction(ID3D12Device*d,NVDX_ObjectHandle m,const char*n,NVDX_ObjectHandle*out){auto&s=S();std::lock_guard<std::recursive_mutex>apiGuard(s.mutex);auto rc=s.createFunction(d,m,n,out);if(rc==0&&n){{std::lock_guard<std::recursive_mutex>g(s.mutex);s.fnInfo[*out]=DlssNrKernelProfile::Classify(n);}{auto role=DlssNrVitReuse::RoleOf(n);if(role!=DlssNrVitReuse::Role::None){std::lock_guard<std::recursive_mutex>g(s.mutex);s.vitRole[*out]=role;}}unsigned kind=99;if(!strcmp(n,"cc_vit_1d_ffn_expand_publish_fp8"))kind=0;else if(!strcmp(n,"cc_vit_1d_ffn_expand_chained_fp8"))kind=1;else if(!strcmp(n,"cc_vit_1d_ffn_contract_chained_fp8"))kind=2;if(kind!=99){std::lock_guard<std::recursive_mutex>g(s.mutex);s.targets[*out]={d,m,kind,s.modules[m]};}}return rc;}
 // ViT reuse: true when at least one launch of this call was dropped; `kept` then holds the others. Only launches recorded inside an NR evaluation are looked at.
-bool VitDrop(State&s,const NVAPI_CU_KERNEL_LAUNCH_PARAMS*k,NvU32 count,std::vector<NVAPI_CU_KERNEL_LAUNCH_PARAMS>&kept){
+// `runEnd`: the last launch of a skipped run was among them.
+bool VitDrop(State&s,const NVAPI_CU_KERNEL_LAUNCH_PARAMS*k,NvU32 count,std::vector<NVAPI_CU_KERNEL_LAUNCH_PARAMS>&kept,bool&runEnd){
  if(!k||!count||!s.vit.Evaluating())return false;bool any=false;
- for(NvU32 i=0;i<count;++i){auto it=s.vitRole.find(k[i].hFunction);if(s.vit.Drop(it==s.vitRole.end()?DlssNrVitReuse::Role::None:it->second))any=true;else kept.push_back(k[i]);}
+ for(NvU32 i=0;i<count;++i){auto it=s.vitRole.find(k[i].hFunction);auto role=it==s.vitRole.end()?DlssNrVitReuse::Role::None:it->second;if(s.vit.Drop(role)){any=true;runEnd|=role==DlssNrVitReuse::Role::End;}else kept.push_back(k[i]);}
  return any;}
 NvAPI_Status __cdecl Launch(ID3D12GraphicsCommandList*c,const NVAPI_CU_KERNEL_LAUNCH_PARAMS*k,NvU32 count){auto&s=S();std::lock_guard<std::recursive_mutex>g(s.mutex);
- {std::vector<NVAPI_CU_KERNEL_LAUNCH_PARAMS>kept;if(VitDrop(s,k,count,kept)){if(kept.empty())return NVAPI_OK;return RealLaunch(s,c,kept.data(),(NvU32)kept.size());}}
+ // A UAV barrier where the skipped run would have been: without it the kernel before the gap and the decoder after it can overlap on the
+ // GPU. The run's own kernels kept them apart; the plain fp16 kernel set flickered on reused frames without it (the fp8 set did not show it).
+ {std::vector<NVAPI_CU_KERNEL_LAUNCH_PARAMS>kept;bool runEnd=false;if(VitDrop(s,k,count,kept,runEnd)){if(runEnd)Barrier(c);if(kept.empty())return NVAPI_OK;return RealLaunch(s,c,kept.data(),(NvU32)kept.size());}}
  // FP8 passthrough must stay available even after a latched hybrid failure: check `enabled`
  // first so switching Precision back to NVIDIA (FP8) fully recovers without an app restart.
  if(!s.enabled)return RealLaunch(s,c,k,count);if(s.restartRequired)return NVAPI_ERROR;if(!k||count!=1){auto pending=std::find_if(s.sessions.begin(),s.sessions.end(),[&](const auto&v){return std::get<0>(v.first)==c&&v.second.pending;});if(pending!=s.sessions.end()){s.restartRequired=true;s.status="Restart required: unsupported launch chain while hybrid pair pending; precision change unavailable";fprintf(stderr,"%s\n",s.status.c_str());return NVAPI_ERROR;}return RealLaunch(s,c,k,count);}auto target=s.targets.find(k->hFunction);if(target==s.targets.end())return RealLaunch(s,c,k,count);auto&t=target->second;

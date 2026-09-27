@@ -10,6 +10,7 @@
 // Why dropping the run is safe (checked on a real capture, fp8 kernels): the run's sync counters are referenced by no kernel outside
 // it, so nothing that is kept can wait on something that was dropped; and its output buffer is written only by its last kernel.
 // Anything that does not look like that turns the feature off for the session instead of guessing.
+// The caller records a UAV barrier where a skipped run ends, so the kernels on either side of the gap cannot overlap on the GPU.
 //
 // This header is only the decision: which launch of an evaluation is dropped. It knows nothing about NvAPI, so tests/nr_vit_reuse_smoke.cpp
 // exercises it on the host.
