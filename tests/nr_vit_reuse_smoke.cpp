@@ -47,6 +47,11 @@ static bool Dropped(const Result& r) // the ViT range was dropped, everything el
     return r.dropped == std::vector<bool> { false, true, true, true, true, true, false };
 }
 
+static bool Rebuilt(const Result& r) // the plain set: the ViT range dropped except its last launch, which rebuilds the 2-D output
+{
+    return r.dropped == std::vector<bool> { false, true, true, true, true, false, false };
+}
+
 static bool Kept(const Result& r)
 {
     for (bool d : r.dropped)
@@ -90,7 +95,7 @@ int main()
     { // and the other way round: plain at 2 reuses, fp8 at 1 never does
         Filter f;
         CHECK(Kept(Eval(f, &a, false, 1, kEval, -1, KernelSet::Plain, 2)));
-        CHECK(Dropped(Eval(f, &a, false, 1, kEval, -1, KernelSet::Plain, 2)));
+        CHECK(Rebuilt(Eval(f, &a, false, 1, kEval, -1, KernelSet::Plain, 2)));
         CHECK(Kept(Eval(f, &b, false, 1, kEval, -1, KernelSet::Fp8, 2)));
         CHECK(Kept(Eval(f, &b, false, 1, kEval, -1, KernelSet::Fp8, 2)));
     }
@@ -98,7 +103,100 @@ int main()
     { // everyPlain 0 = the same rate as fp8 (callers that do not tell the sets apart)
         Filter f;
         CHECK(Kept(Eval(f, &a, false, 2, kEval, -1, KernelSet::Plain)));
-        CHECK(Dropped(Eval(f, &a, false, 2, kEval, -1, KernelSet::Plain)));
+        CHECK(Rebuilt(Eval(f, &a, false, 2, kEval, -1, KernelSet::Plain)));
+    }
+
+    { // the gap is reported once, at the run's last launch, on both sets, whether that launch is dropped or kept; never on a computed run
+        for (KernelSet set : { KernelSet::Fp8, KernelSet::Plain })
+        {
+            Filter f;
+            for (int round = 0; round < 2; ++round) // computed, then skipped
+            {
+                f.Begin(&a, false, 2);
+                std::vector<bool> gaps;
+                for (Role role : kEval)
+                {
+                    f.Drop(role, set);
+                    gaps.push_back(f.TakeGap());
+                }
+                CHECK(f.End());
+                CHECK(gaps == (round == 0 ? std::vector<bool>(kEval.size(), false)
+                                          : std::vector<bool> { false, false, false, false, false, true, false }));
+                CHECK(!f.TakeGap());
+            }
+            // a skipped run counts as reused on both sets, even when its last launch still runs
+            CHECK(f.Computed() == 1 && f.Reused() == 1);
+        }
+    }
+
+    { // Split: one launch call cut around the barrier. Launches are ints: 0 other work, 1 start, 2 inner, 3 end.
+        auto roleOf = [](const KernelSet set) {
+            return [set](const int& l) {
+                const Role r = l == 1 ? Role::Start : l == 2 ? Role::Inner : l == 3 ? Role::End : Role::None;
+                return std::pair { r, r == Role::None ? KernelSet::Unknown : set };
+            };
+        };
+        struct Out
+        {
+            bool any;
+            std::vector<int> kept;
+            std::ptrdiff_t gap;
+        };
+        // one evaluation, computed once and then skipped, launched as the given calls; returns the skipped evaluation's calls
+        auto run = [&](KernelSet set, const std::vector<std::vector<int>>& calls) {
+            Filter f;
+            std::vector<Out> outs;
+            for (int round = 0; round < 2; ++round)
+            {
+                f.Begin(&a, false, 2);
+                outs.clear();
+                for (const auto& call : calls)
+                {
+                    Out o { false, {}, -1 };
+                    o.any = f.Split(call.data(), call.size(), roleOf(set), o.kept, o.gap);
+                    outs.push_back(o);
+                }
+                CHECK(f.End());
+                if (round == 0) // computed: nothing dropped, no barrier
+                    for (const auto& o : outs)
+                        CHECK(!o.any && o.gap == -1);
+            }
+            return outs;
+        };
+        using V = std::vector<int>;
+
+        // all in one call: fp8 drops the run, the barrier goes where it was; plain keeps the end, barrier right before it
+        auto o = run(KernelSet::Fp8, { { 0, 1, 2, 3, 0 } });
+        CHECK(o[0].any && o[0].kept == V({ 0, 0 }) && o[0].gap == 1);
+        o = run(KernelSet::Plain, { { 0, 1, 2, 3, 0 } });
+        CHECK(o[0].any && o[0].kept == V({ 0, 3, 0 }) && o[0].gap == 1);
+
+        // the end alone in its call: plain still asks for the barrier (before it), fp8 drops it
+        o = run(KernelSet::Plain, { { 0, 1, 2 }, { 3 }, { 0 } });
+        CHECK(o[0].any && o[0].kept == V({ 0 }) && o[0].gap == -1);
+        CHECK(o[1].any && o[1].kept == V({ 3 }) && o[1].gap == 0);
+        CHECK(!o[2].any && o[2].gap == -1);
+        o = run(KernelSet::Fp8, { { 0, 1, 2 }, { 3 }, { 0 } });
+        CHECK(o[1].any && o[1].kept.empty() && o[1].gap == 0);
+
+        // the end first or last in a call
+        o = run(KernelSet::Plain, { { 1, 2 }, { 3, 0, 0 } });
+        CHECK(o[0].any && o[0].kept.empty() && o[0].gap == -1);
+        CHECK(o[1].any && o[1].kept == V({ 3, 0, 0 }) && o[1].gap == 0);
+        o = run(KernelSet::Plain, { { 0, 1, 2, 3 } });
+        CHECK(o[0].any && o[0].kept == V({ 0, 3 }) && o[0].gap == 1);
+    }
+
+    { // plain set, another kernel inside a skipped run: the end still runs and the barrier is still asked for, the feature goes off
+        Filter f;
+        CHECK(Kept(Eval(f, &a, false, 2, kEval, -1, KernelSet::Plain)));
+        f.Begin(&a, false, 2);
+        CHECK(f.Drop(Role::Start, KernelSet::Plain));
+        CHECK(!f.Drop(Role::None, KernelSet::Unknown));
+        CHECK(!f.Drop(Role::End, KernelSet::Plain));
+        CHECK(f.TakeGap());
+        CHECK(!f.End());
+        CHECK(f.Disabled());
     }
 
     { // outside an evaluation nothing is touched, whatever the setting

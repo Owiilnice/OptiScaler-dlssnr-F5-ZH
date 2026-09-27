@@ -140,14 +140,13 @@ bool Supported(const void*data,unsigned bytes){if(bytes!=3202680||!data)return f
 NvAPI_Status __cdecl CreateModule(ID3D12Device*d,const void*b,NvU32 n,NVDX_ObjectHandle*out){auto&s=S();std::lock_guard<std::recursive_mutex>apiGuard(s.mutex);auto rc=s.createModule(d,b,n,out);if(rc==0){std::lock_guard<std::recursive_mutex>g(s.mutex);s.modules[*out]=Supported(b,n);s.active=false;}return rc;}
 NvAPI_Status __cdecl CreateFunction(ID3D12Device*d,NVDX_ObjectHandle m,const char*n,NVDX_ObjectHandle*out){auto&s=S();std::lock_guard<std::recursive_mutex>apiGuard(s.mutex);auto rc=s.createFunction(d,m,n,out);if(rc==0&&n){{std::lock_guard<std::recursive_mutex>g(s.mutex);s.fnInfo[*out]=DlssNrKernelProfile::Classify(n);}{auto role=DlssNrVitReuse::RoleOf(n);if(role!=DlssNrVitReuse::Role::None){std::lock_guard<std::recursive_mutex>g(s.mutex);s.vitRole[*out]={role,DlssNrVitReuse::SetOf(n)};}}unsigned kind=99;if(!strcmp(n,"cc_vit_1d_ffn_expand_publish_fp8"))kind=0;else if(!strcmp(n,"cc_vit_1d_ffn_expand_chained_fp8"))kind=1;else if(!strcmp(n,"cc_vit_1d_ffn_contract_chained_fp8"))kind=2;if(kind!=99){std::lock_guard<std::recursive_mutex>g(s.mutex);s.targets[*out]={d,m,kind,s.modules[m]};}}return rc;}
 // ViT reuse: true when at least one launch of this call was dropped; `kept` then holds the others. Only launches recorded inside an NR evaluation are looked at.
-// `gap`: where in `kept` the last launch of a skipped run was, or -1 when it was not among them.
+// `gap`: where in `kept` the barrier goes (see Filter::Split), or -1.
 bool VitDrop(State&s,const NVAPI_CU_KERNEL_LAUNCH_PARAMS*k,NvU32 count,std::vector<NVAPI_CU_KERNEL_LAUNCH_PARAMS>&kept,ptrdiff_t&gap){
- if(!k||!count||!s.vit.Evaluating())return false;bool any=false;
- for(NvU32 i=0;i<count;++i){auto it=s.vitRole.find(k[i].hFunction);auto role=it==s.vitRole.end()?DlssNrVitReuse::Role::None:it->second.first;if(s.vit.Drop(role,it==s.vitRole.end()?DlssNrVitReuse::KernelSet::Unknown:it->second.second)){any=true;if(role==DlssNrVitReuse::Role::End)gap=(ptrdiff_t)kept.size();}else kept.push_back(k[i]);}
- return any;}
+ if(!k||!count||!s.vit.Evaluating())return false;
+ return s.vit.Split(k,count,[&](const NVAPI_CU_KERNEL_LAUNCH_PARAMS&l){auto it=s.vitRole.find(l.hFunction);return it==s.vitRole.end()?std::pair{DlssNrVitReuse::Role::None,DlssNrVitReuse::KernelSet::Unknown}:it->second;},kept,gap);}
 NvAPI_Status __cdecl Launch(ID3D12GraphicsCommandList*c,const NVAPI_CU_KERNEL_LAUNCH_PARAMS*k,NvU32 count){auto&s=S();std::lock_guard<std::recursive_mutex>g(s.mutex);
- // A UAV barrier where the skipped run would have been: without it the kernel before the gap and the decoder after it can overlap on the
- // GPU. The run's own kernels kept them apart; the plain fp16 kernel set flickered on reused frames without it (the fp8 set did not show it).
+ // A UAV barrier where the skipped run would have been: without it the kernel before the gap and the one after it can overlap on the
+ // GPU. The run's own kernels kept them apart. On the plain set the kernel after it is the run's kept last kernel (see DlssNrVitReuse.h).
  {std::vector<NVAPI_CU_KERNEL_LAUNCH_PARAMS>kept;ptrdiff_t gap=-1;if(VitDrop(s,k,count,kept,gap)){if(gap<0)return kept.empty()?NVAPI_OK:RealLaunch(s,c,kept.data(),(NvU32)kept.size());
   // the kept launches of this call on either side of the gap go out as two chains with the barrier between them
   if(gap>0){auto r=RealLaunch(s,c,kept.data(),(NvU32)gap);if(r!=NVAPI_OK)return r;}Barrier(c);return (size_t)gap<kept.size()?RealLaunch(s,c,kept.data()+gap,(NvU32)(kept.size()-gap)):NVAPI_OK;}}
