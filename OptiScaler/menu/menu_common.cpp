@@ -2281,7 +2281,15 @@ void MenuCommon::RenderMainMenuHeaderMessages(RenderMenuContext& ctx)
         }
         else if (!versionStatus.error.empty())
         {
-            LOG_ERROR("Version check failed: {0}", versionStatus.error);
+            // versionStatus is copied from State every frame, so clearing it here does not stop the
+            // next frame from logging again: log each distinct error once.
+            static std::string lastLoggedVersionError;
+            if (versionStatus.error != lastLoggedVersionError)
+            {
+                LOG_ERROR("Version check failed: {0}", versionStatus.error);
+                lastLoggedVersionError = versionStatus.error;
+            }
+
             versionStatus.error.clear();
         }
         // Disabled error message
