@@ -16,4 +16,6 @@ std::vector<std::string> TakeProfileReports();
 std::string VitStatus();
 // The kernel set of the last ViT run seen: "FP8", "plain FP16" or "not seen yet".
 const char* VitKernelSet();
+// True when the last ViT run seen used the plain fp16 kernels.
+bool VitPlainKernels();
 }

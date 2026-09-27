@@ -1265,7 +1265,7 @@ void RenderMenu(Config* config, float menuResScale)
             config->DlssNrVitEveryPlain = vitReusePlain ? 2u : 1u;
         HelpMarker("The same as above, used when the model runs the plain FP16 kernels (used by some modified DLSS-NR DLLs).\nOn by default.");
         ImGui::Text("Kernel set in use: %s", kernelSet);
-        if (std::strcmp(kernelSet, "plain FP16") == 0 ? vitReusePlain : vitReuse)
+        if (DlssNrNative::VitPlainKernels() ? vitReusePlain : vitReuse)
             ImGui::TextUnformatted(("Bottleneck reuse: " + DlssNrNative::VitStatus()).c_str());
         if (precisionChoice > 0)
         {
