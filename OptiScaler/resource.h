@@ -39,7 +39,7 @@
 // compares this against the fork repo's GitHub releases, not VER_MAJOR/MINOR/HOTFIX_VERSION.
 #define NR_RELEASE_MAJOR_VERSION 0
 #define NR_RELEASE_MINOR_VERSION 1
-#define NR_RELEASE_HOTFIX_VERSION 20
+#define NR_RELEASE_HOTFIX_VERSION 21
 #define NR_RELEASE_VERSION_STR                                                                                        \
     STRINGIZE(NR_RELEASE_MAJOR_VERSION) "." STRINGIZE(NR_RELEASE_MINOR_VERSION) "." STRINGIZE(NR_RELEASE_HOTFIX_VERSION)
 
