@@ -212,14 +212,14 @@ static void ApplyPassPreset(Config* config, unsigned int passes)
 {
     config->DlssNrEnabled = true;
     config->DlssNrPrecision = 0u; // NVIDIA (FP8)
-    config->DlssNrVitEvery = 2u; // Reuse bottleneck on, the default
-    config->DlssNrVitEveryPlain = 2u; // the same for the plain FP16 kernels
     config->DlssNrApplyModel = true;
     config->DlssNrUnlockPasses = false;
     config->DlssNrPasses = passes;
 
     // Upscale Method, Upscale Mode and Final Image Composition are deliberately not set here: the Pre-SR/Post-SR
     // tiers set them, and writing them from a pass preset would clear that tier's highlight.
+    // Reuse bottleneck is not set here either: it is a speed/quality choice per kernel set, not part of a look, so a
+    // preset leaves both checkboxes as the user had them.
     config->DlssNrTransferStrength = 1.0f;      // Detail strength
     config->DlssNrColourStrength = 1.0f;
     config->DlssNrStyle = PresetPass1.style;
