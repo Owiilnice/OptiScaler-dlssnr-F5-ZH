@@ -12,6 +12,12 @@
 // Anything that does not look like that turns the feature off for the session instead of guessing.
 // The caller records a UAV barrier where a skipped run ends, so the kernels on either side of the gap cannot overlap on the GPU.
 //
+// The plain fp16 kernels (used by some modified DLSS-NR DLLs) lay the network's memory out differently: the run's 2-D output, which the
+// decoder reads, shares memory with an early full-size activation that is rewritten every evaluation. Only the run's 1-D result, the
+// input of its last kernel (repack_1d_to_2d), keeps its own memory. So on that set a skipped run keeps its last kernel, which rebuilds
+// the 2-D output from the kept 1-D result. The fp8 set drops it: there the 2-D output keeps its own memory, and nothing says the 1-D
+// result does.
+//
 // This header is only the decision: which launch of an evaluation is dropped. It knows nothing about NvAPI, so tests/nr_vit_reuse_smoke.cpp
 // exercises it on the host.
 
@@ -120,6 +126,7 @@ class Filter
             }
 
             c.inRange = true;
+            c.set = set;
             lastSet_ = set;
 
             const unsigned every = set == KernelSet::Plain ? c.everyPlain : c.every;
@@ -156,8 +163,9 @@ class Filter
             if (c.skipping)
             {
                 c.skipping = false;
+                c.gap = true;
                 ++reused_;
-                return true;
+                return c.set != KernelSet::Plain; // the plain set keeps it: it rebuilds the 2-D output (see the top)
             }
 
             std::lock_guard<std::mutex> lock(mutex_);
@@ -173,6 +181,16 @@ class Filter
 
             return false;
         }
+    }
+
+    // True once, right after the Drop call for the last launch of a skipped run, whether that launch was dropped or kept: the
+    // caller's barrier goes where that launch is (before it when it is kept).
+    bool TakeGap()
+    {
+        Ctx& c = ctx();
+        const bool gap = c.gap;
+        c.gap = false;
+        return gap;
     }
 
     // End of the evaluation. False when what was launched did not look like the expected order; the feature is then off
@@ -241,6 +259,8 @@ class Filter
         bool inRange = false;
         bool skipping = false;
         bool anomaly = false;
+        bool gap = false;                   // see TakeGap
+        KernelSet set = KernelSet::Unknown; // of the run in progress
     };
 
     static Ctx& ctx()

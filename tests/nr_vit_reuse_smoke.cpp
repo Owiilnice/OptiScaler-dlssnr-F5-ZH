@@ -47,6 +47,11 @@ static bool Dropped(const Result& r) // the ViT range was dropped, everything el
     return r.dropped == std::vector<bool> { false, true, true, true, true, true, false };
 }
 
+static bool Rebuilt(const Result& r) // the plain set: the ViT range dropped except its last launch, which rebuilds the 2-D output
+{
+    return r.dropped == std::vector<bool> { false, true, true, true, true, false, false };
+}
+
 static bool Kept(const Result& r)
 {
     for (bool d : r.dropped)
@@ -90,7 +95,7 @@ int main()
     { // and the other way round: plain at 2 reuses, fp8 at 1 never does
         Filter f;
         CHECK(Kept(Eval(f, &a, false, 1, kEval, -1, KernelSet::Plain, 2)));
-        CHECK(Dropped(Eval(f, &a, false, 1, kEval, -1, KernelSet::Plain, 2)));
+        CHECK(Rebuilt(Eval(f, &a, false, 1, kEval, -1, KernelSet::Plain, 2)));
         CHECK(Kept(Eval(f, &b, false, 1, kEval, -1, KernelSet::Fp8, 2)));
         CHECK(Kept(Eval(f, &b, false, 1, kEval, -1, KernelSet::Fp8, 2)));
     }
@@ -98,7 +103,28 @@ int main()
     { // everyPlain 0 = the same rate as fp8 (callers that do not tell the sets apart)
         Filter f;
         CHECK(Kept(Eval(f, &a, false, 2, kEval, -1, KernelSet::Plain)));
-        CHECK(Dropped(Eval(f, &a, false, 2, kEval, -1, KernelSet::Plain)));
+        CHECK(Rebuilt(Eval(f, &a, false, 2, kEval, -1, KernelSet::Plain)));
+    }
+
+    { // the gap is reported once, at the run's last launch, on both sets, whether that launch is dropped or kept; never on a computed run
+        for (KernelSet set : { KernelSet::Fp8, KernelSet::Plain })
+        {
+            Filter f;
+            for (int round = 0; round < 2; ++round) // computed, then skipped
+            {
+                f.Begin(&a, false, 2);
+                std::vector<bool> gaps;
+                for (Role role : kEval)
+                {
+                    f.Drop(role, set);
+                    gaps.push_back(f.TakeGap());
+                }
+                CHECK(f.End());
+                CHECK(gaps == (round == 0 ? std::vector<bool>(kEval.size(), false)
+                                          : std::vector<bool> { false, false, false, false, false, true, false }));
+                CHECK(!f.TakeGap());
+            }
+        }
     }
 
     { // outside an evaluation nothing is touched, whatever the setting
