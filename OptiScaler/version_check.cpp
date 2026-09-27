@@ -74,7 +74,7 @@ std::optional<LatestReleaseInfo> FetchLatestRelease()
     }
 
     request = WinHttpOpenRequest(connection, L"GET",
-                                 L"/repos/janblade/OptiScaler-DLSSNR-PreSR-Multipass/releases/latest", nullptr,
+                                 L"/repos/janblade/OptiScaler-F5-DLSSNR-Multipass/releases/latest", nullptr,
                                  WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
     if (request == nullptr)
     {
@@ -178,7 +178,15 @@ void RunVersionCheck()
         ~Finalizer() { FinishVersionCheck(); }
     } finalize;
 
+    // The check starts while the game is launching, when the network is not always reachable yet
+    // (WinHTTP 12029, cannot connect). One more try a little later covers that.
     auto release = FetchLatestRelease();
+    if (!release.has_value())
+    {
+        std::this_thread::sleep_for(std::chrono::seconds(10));
+        release = FetchLatestRelease();
+    }
+
     if (!release.has_value())
     {
         auto& state = State::Instance();

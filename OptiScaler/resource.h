@@ -32,7 +32,7 @@
 #define VER_BUILD_NUMBER 0
 
 // This fork's own release train (git tags "vX.Y.Z-slug" on
-// janblade/OptiScaler-DLSSNR-PreSR-Multipass, e.g. v0.1.6-dlssnr-enlarge-filter-simplify) --
+// janblade/OptiScaler-F5-DLSSNR-Multipass, e.g. v0.1.6-dlssnr-enlarge-filter-simplify) --
 // separate from VER_MAJOR/MINOR/HOTFIX_VERSION above, which track the upstream OptiScaler base
 // this fork last synced to and are also read by the XeSS/FSR/FfxApi wrapper paths to spoof a
 // reported version to games. Bump these three on every new fork release tag; version_check.cpp

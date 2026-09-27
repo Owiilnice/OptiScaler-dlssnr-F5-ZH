@@ -19,7 +19,7 @@ DLL-containing FG archive are uploaded**. The local bundle from development is n
 2. Use a package built with `package_release.ps1` that contains `get_streamline.ps1` and
    `redist/streamline/manifest.json`. Older v0.5 and earlier releases do not contain them.
    If using an older release or a nightly without those files, download this repository's
-   [source ZIP](https://github.com/janblade/OptiScaler-DLSSNR-PreSR-Multipass/archive/refs/heads/main.zip)
+   [source ZIP](https://github.com/janblade/OptiScaler-F5-DLSSNR-Multipass/archive/refs/heads/main.zip)
    and extract it into a separate working folder. Do not install the source tree over your game.
 3. Read the NVIDIA licences below. Open PowerShell in the folder containing `get_streamline.ps1`
    and `redist`, then replace the example path with the real game's executable directory:
