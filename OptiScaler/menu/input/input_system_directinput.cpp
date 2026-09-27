@@ -972,7 +972,10 @@ HRESULT WINAPI hkDirectInputGetDeviceState(void* device, DWORD dataSize, LPVOID 
         _state.DirectInputGetDeviceStateCallCount++;
 
         blocking = ShouldBlockDirectInputDeviceLocked(kind);
-        feedOverlay = _state.MenuVisible && kind == DirectInputDeviceKind::Mouse && data != nullptr;
+        // Only the standard mouse layouts (DIMOUSESTATE / DIMOUSESTATE2): with a custom data format the
+        // button bytes are not where the feed reads them.
+        feedOverlay = _state.MenuVisible && kind == DirectInputDeviceKind::Mouse && data != nullptr &&
+                      (dataSize == sizeof(DIMOUSESTATE) || dataSize == sizeof(DIMOUSESTATE2));
 
         // Fast path: blocking and the overlay does not need this device -- zero it and return
         // without ever calling the real read.
@@ -1033,6 +1036,7 @@ HRESULT WINAPI hkDirectInputGetDeviceData(void* device, DWORD objectDataSize, LP
     DirectInputDeviceKind kind = DirectInputDeviceKind::Other;
     bool shouldBlock = false;
     bool feedOverlay = false;
+    bool keepQueue = false;
 
     {
         std::unique_lock lock(_state.Mutex);
@@ -1043,6 +1047,10 @@ HRESULT WINAPI hkDirectInputGetDeviceData(void* device, DWORD objectDataSize, LP
         // the buffer for a later real read, and feeding both would double-count the click.
         feedOverlay = _state.MenuVisible && kind == DirectInputDeviceKind::Mouse && data != nullptr &&
                       inOut != nullptr && (flags & DIGDD_PEEK) == 0 && objectDataSize >= 2 * sizeof(DWORD);
+        // A blocked mouse read the overlay cannot use (a PEEK, or a count query with no buffer) must not empty
+        // the queue: the game's real read that follows is where the overlay learns the click. Whatever is left
+        // when the menu closes is drained then (DrainDirectInputBufferedDataLocked).
+        keepQueue = _state.MenuVisible && kind == DirectInputDeviceKind::Mouse;
 
         if (shouldBlock)
             _state.DirectInputGetDeviceDataBlockedCount++;
@@ -1063,12 +1071,14 @@ HRESULT WINAPI hkDirectInputGetDeviceData(void* device, DWORD objectDataSize, LP
 
     // The overlay needs this mouse's events (Assetto Corsa + CSP reads its mouse only through
     // DirectInput): do the real read so the overlay sees the clicks, then hand the game an empty read
-    // if the menu owns the mouse this frame. The real read drained the queue, so nothing replays
-    // after the overlay closes.
+    // if the menu owns the mouse this frame. The events read here are consumed; anything the read left
+    // in the buffer is drained when the menu closes, so nothing replays afterwards.
     if (!shouldBlock || feedOverlay)
     {
         if (original == nullptr)
             return DIERR_GENERIC;
+
+        const DWORD requested = inOut != nullptr ? *inOut : 0;
 
         HRESULT hr;
         {
@@ -1080,7 +1090,8 @@ HRESULT WINAPI hkDirectInputGetDeviceData(void* device, DWORD objectDataSize, LP
         {
             std::unique_lock lock(_state.Mutex);
 
-            const DWORD entries = *inOut;
+            // Never walk past the buffer the game handed in, whatever count comes back.
+            const DWORD entries = (std::min)(*inOut, requested);
             const DWORD time = GetTickCount();
 
             for (DWORD i = 0; i < entries; i++)
@@ -1112,7 +1123,7 @@ HRESULT WINAPI hkDirectInputGetDeviceData(void* device, DWORD objectDataSize, LP
     // GetDeviceData is backed by a buffered event queue. Returning zero without
     // touching the real queue lets menu-time events replay after closing the
     // overlay. Flush the device buffer, then present an empty successful read.
-    if (original != nullptr)
+    if (original != nullptr && !keepQueue)
     {
         DWORD flushCount = INFINITE;
         ScopedHookBypass bypass;
