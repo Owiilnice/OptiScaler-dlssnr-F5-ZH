@@ -65,7 +65,7 @@ struct ScanState
     std::vector<Tracked> tracked;
     ID3D12Resource* readback[kSlots] = {};
     unsigned long long frames = 0;
-    const char* status = "not started";
+    const char* status = "未开始";
     bool complained = false;
     unsigned int nearMissLogged = 0;   // bounded diagnostic; see NoteResource
 };
@@ -189,7 +189,7 @@ bool EnsureReadback(ID3D12Device* device)
                                                    D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
                                                    IID_PPV_ARGS(&g_scan.readback[i]))))
         {
-            g_scan.status = "could not allocate the readback buffers";
+            g_scan.status = "无法分配回读缓冲区";
             return false;
         }
     }
@@ -400,7 +400,7 @@ void Tick(ID3D12Device* device, ID3D12GraphicsCommandList* cmdList)
 
     if (g_scan.tracked.empty())
     {
-        g_scan.status = "no buffer in this game is shaped like an exposure";
+        g_scan.status = "此游戏中没有形状像曝光值的缓冲区";
         return;
     }
 
@@ -613,9 +613,9 @@ const char* Headline()
         // amount of playing will change that; a large number means the game genuinely has nothing
         // shaped like an exposure, which is an answer rather than a failure.
         const unsigned int seen = Examined();
-        line = seen == 0 ? "DLSS-NR exposure scan: NOT RUNNING -- no resources seen at all"
-                         : "DLSS-NR exposure scan: examined " + std::to_string(seen) +
-                               " resources, none shaped like an exposure";
+        line = seen == 0 ? "DLSS-NR 曝光扫描：未运行 —— 完全未见到任何资源"
+                         : "DLSS-NR 曝光扫描：已检查 " + std::to_string(seen) +
+                               " 个资源，没有一个形状像曝光值";
         break;
     }
 
@@ -627,8 +627,8 @@ const char* Headline()
         for (const Tracked& t : g_scan.tracked)
             mostReads = std::max(mostReads, t.reads);
 
-        line = "DLSS-NR exposure scan: watching " + std::to_string(g_scan.tracked.size()) +
-               ", none moving yet -- walk between light and shade  (" +
+        line = "DLSS-NR 曝光扫描：正在监视 " + std::to_string(g_scan.tracked.size()) +
+               "，尚无变化 —— 请在明暗之间走动  (" +
                std::to_string(mostReads * 100 / kPatience) + "%)";
         break;
     }
@@ -662,7 +662,7 @@ const char* Headline()
         // The live value is in here so the line visibly ticks. Without it the indicator looks stuck
         // the moment the range settles, which is exactly when it has succeeded.
         snprintf(buf, sizeof(buf),
-                 "DLSS-NR exposure scan: FOUND -- candidate %zu = %.5f  (%.5f..%.5f, x%.0f)  done",
+                 "DLSS-NR 曝光扫描：已找到 —— 候选 %zu = %.5f  （%.5f..%.5f，x%.0f）  完成",
                  best + 1, g_scan.tracked[best].latest, g_scan.tracked[best].lowest,
                  g_scan.tracked[best].highest, bestRatio);
         line = buf;
@@ -670,7 +670,7 @@ const char* Headline()
     }
 
     case Verdict::Barren:
-        line = "DLSS-NR exposure scan: nothing moved. No exposure to find here.";
+        line = "DLSS-NR 曝光扫描：没有任何变化。此处找不到曝光值。";
         break;
     }
 
@@ -988,7 +988,7 @@ void Shutdown()
     }
 
     g_scan.frames = 0;
-    g_scan.status = "not started";
+    g_scan.status = "未开始";
 }
 
 } // namespace ExposureScan

@@ -16,7 +16,7 @@ struct Slot
 std::array<Slot, 4> slots;
 ComPtr<ID3D12Device> device;
 uint64_t serial = 0, successes = 0;
-std::string status = "Waiting for a finished picture.";
+std::string status = "正在等待成品画面。";
 bool reset = true;
 std::atomic<bool> tracking { false };
 inline constexpr GUID colorSpaceKey = { 0x34a31e7b, 0x84c5, 0x44ef, { 0xa7, 0x4d, 0x6b, 0xd3, 0x60, 0x8c, 0xe5, 0x22 } };
@@ -66,13 +66,13 @@ bool Clone(ComPtr<ID3D12Resource>& copy, ID3D12Resource* source)
 Slot* Acquire(ID3D12GraphicsCommandList* cmd)
 {
     if (!cmd || State::Instance().swapchainInteropApi != SwapchainInteropApi::None)
-    { Say("This option needs a native DirectX 12 game."); return nullptr; }
+    { Say("此选项需要原生 DirectX 12 游戏。"); return nullptr; }
     ComPtr<ID3D12Device> currentDevice;
     if (FAILED(cmd->GetDevice(IID_PPV_ARGS(&currentDevice))))
         return nullptr;
     if (device && device != currentDevice)
     {
-        Say("The graphics device changed. Restart the game to use this option.");
+        Say("图形设备已更改。请重启游戏以使用此选项。");
         return nullptr;
     }
     device = currentDevice;
@@ -84,7 +84,7 @@ Slot* Acquire(ID3D12GraphicsCommandList* cmd)
         if (!slot.pending && Finished(slot)) { next = &slot; break; }
     if (!next)
     {
-        Say("Waiting for the previous picture to finish.");
+        Say("正在等待上一幅成品画面完成。");
         return nullptr;
     }
     auto& slot = *next;
@@ -96,7 +96,7 @@ Slot* Acquire(ID3D12GraphicsCommandList* cmd)
                                             IID_PPV_ARGS(&slot.commands))) || FAILED(slot.commands->Close()))
         {
             slot.commands.Reset(); slot.allocator.Reset(); slot.fence.Reset();
-            Say("Could not prepare the finished-picture option.");
+            Say("无法准备成品画面选项。");
             return nullptr;
         }
     }
@@ -122,12 +122,12 @@ void Capture(ID3D12GraphicsCommandList* cmd, NVSDK_NGX_Parameter* params, bool r
     auto* motion = GetResource(params, NVSDK_NGX_Parameter_MotionVectors, "DLSSD.MotionVectors");
     auto* output = GetResource(params, NVSDK_NGX_Parameter_Output, "DLSSD.Output");
     if (!depth || !motion || !output)
-    { Cancel(); Say("Waiting for the game's depth and movement data."); return; }
+    { Cancel(); Say("正在等待游戏的深度与运动数据。"); return; }
     auto* next = Acquire(cmd);
     if (!next) return;
     auto& slot = *next;
     if (!Clone(slot.depth, depth) || !Clone(slot.motion, motion))
-    { Say("The game's depth or movement data is not supported."); return; }
+    { Say("不支持该游戏的深度或运动数据。"); return; }
     slot.residualOnly = false;
     // Copy at the NGX seam, where guide states and lifetimes are defined. Keep typed,
     // shader-readable copies until both the producing queue and NR have finished.
@@ -172,7 +172,7 @@ bool CaptureResidual(ID3D12GraphicsCommandList* cmd, ID3D12Resource* clean, ID3D
     if (!next) return false;
     auto& slot = *next;
     if (!Clone(slot.residual, residual))
-    { Say("The upscaled changes could not be saved."); return false; }
+    { Say("无法保存放大后的变化量。"); return false; }
     Barrier(cmd, residual, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
     cmd->CopyResource(slot.residual.Get(), residual);
     Barrier(cmd, residual, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -246,7 +246,7 @@ void FinishedPictureSubmitted(ID3D12CommandQueue* queue, UINT count, ID3D12Comma
                         // The copy already executed. Keep its unsignalled fence protecting
                         // the slot instead of treating this as a discarded recording.
                         slot.pending = false;
-                        Late::Say("The graphics queue stopped. Restart the game to retry.");
+                        Late::Say("图形队列已停止。请重启游戏后重试。");
                     }
                     break;
                 }
@@ -288,7 +288,7 @@ void ApplyToFinishedPicture(IDXGISwapChain* swapchain, ID3D12CommandQueue* queue
         (!scrgb && desc.Format != DXGI_FORMAT_R8G8B8A8_UNORM && desc.Format != DXGI_FORMAT_R10G10B10A2_UNORM))
     {
         Late::Cancel();
-        Late::Say("This screen colour format is not supported.");
+        Late::Say("不支持此屏幕色彩格式。");
         return;
     }
     Late::Slot* latest = nullptr;
@@ -320,7 +320,7 @@ void ApplyToFinishedPicture(IDXGISwapChain* swapchain, ID3D12CommandQueue* queue
         FAILED(slot.commands->Reset(slot.allocator.Get(), nullptr)))
     {
         Late::reset = true;
-        Late::Say("Could not prepare the finished picture.");
+        Late::Say("无法准备成品画面。");
         return;
     }
     auto* cmd = slot.commands.Get();
@@ -419,7 +419,7 @@ void ApplyToFinishedPicture(IDXGISwapChain* swapchain, ID3D12CommandQueue* queue
     }
     if (FAILED(cmd->Close()))
     {
-        Late::Say("Could not finish the picture. Restart the game to retry.");
+        Late::Say("无法完成成品画面。请重启游戏后重试。");
         slot.pending = true; // quarantine the slot; do not reuse possibly recorded NR resources
         slot.submitted = false;
         return;
@@ -429,14 +429,14 @@ void ApplyToFinishedPicture(IDXGISwapChain* swapchain, ID3D12CommandQueue* queue
     slot.done = slot.ready + 1;
     if (FAILED(queue->Signal(slot.fence.Get(), slot.done)))
     {
-        Late::Say("The graphics queue stopped. Restart the game to retry.");
+        Late::Say("图形队列已停止。请重启游戏后重试。");
         return;
     }
     const bool ran = slot.residualOnly ? appliedResidual : g_nr.successfulDispatches > before;
     Late::reset = !ran;
-    Late::Say(!Config::Instance()->DlssNrApplyModel.value_or_default() ? "NR changes are hidden." :
-        ran ? (slot.residualOnly ? "Applying the pre-SR changes to the finished picture." :
-        "Applying NR to the finished picture.") : "Preparing NR for the finished picture.");
+    Late::Say(!Config::Instance()->DlssNrApplyModel.value_or_default() ? "NR 变化量已隐藏。" :
+        ran ? (slot.residualOnly ? "正在把超分前的变化量应用到成品画面。" :
+        "正在把 NR 应用到成品画面。") : "正在为成品画面准备 NR。");
     if (ran && (++Late::successes == 1 || Late::successes % 300 == 0))
         LOG_INFO("DLSS-NR finished picture: {} frames, {}x{}, FG {}", Late::successes,
                  desc.Width, desc.Height, State::Instance().currentFG &&

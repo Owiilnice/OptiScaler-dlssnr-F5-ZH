@@ -100,7 +100,7 @@ struct Use
 
 std::unique_ptr<Generation> current;
 std::vector<std::unique_ptr<Generation>> retired;
-std::string status = "not started";
+std::string status = "未开始";
 struct Pending
 {
     ID3D12GraphicsCommandList* cmd = nullptr;
@@ -295,14 +295,14 @@ void Before(ID3D12GraphicsCommandList* cmd, NVSDK_NGX_Parameter* source,
         cfg.DlssNrShowSkinMask.value_or_default() ||
         (!cfg.DlssNrApplyModel.value_or_default() && !cfg.DlssNrFinishedPicture.value_or_default()))
     {
-        Say("inactive: disable proxy backend, frame hold/debug/compare, and enable Apply model");
+        Say("未启用: 请关闭代理后端、保持帧/调试/对比，并启用「应用模型」");
         return;
     }
     if (cmd->GetType() != D3D12_COMMAND_LIST_TYPE_DIRECT ||
         (!privateJob && (cfg.RestoreComputeSignature.value_or_default() || cfg.RestoreGraphicSignature.value_or_default()) &&
          !D3D12Hooks::CanRestoreRootSignature(cmd)))
     {
-        Say("inactive: requires a direct command list with restorable game state");
+        Say("未启用: 需要可恢复游戏状态的直接命令列表");
         return;
     }
     auto* color = GetResource(source, NVSDK_NGX_Parameter_Color, "DLSSD.Color");
@@ -314,7 +314,7 @@ void Before(ID3D12GraphicsCommandList* cmd, NVSDK_NGX_Parameter* source,
     const bool sampleAndHold = wantsHalf && motion == nullptr;
     if (!color || !output || !depth || (!motion && !sampleAndHold) || color == output)
     {
-        Say("inactive: distinct Color/Output, depth and motion are required");
+        Say("未启用: 需要彼此不同的 Color/Output、深度和运动向量");
         return;
     }
     for (const char* key : { NVSDK_NGX_Parameter_DLSS_Input_Color_Subrect_Base_X,
@@ -322,7 +322,7 @@ void Before(ID3D12GraphicsCommandList* cmd, NVSDK_NGX_Parameter* source,
          NVSDK_NGX_Parameter_DLSS_Input_Depth_Subrect_Base_Y, NVSDK_NGX_Parameter_DLSS_Input_MV_SubrectBase_X,
          NVSDK_NGX_Parameter_DLSS_Input_MV_SubrectBase_Y, NVSDK_NGX_Parameter_DLSS_Output_Subrect_Base_X,
          NVSDK_NGX_Parameter_DLSS_Output_Subrect_Base_Y })
-        if (UInt(source, key) != 0) { Say("inactive: non-zero colour/guide/output offsets"); return; }
+        if (UInt(source, key) != 0) { Say("未启用: 颜色/引导/输出偏移不为零"); return; }
     const auto inDesc = color->GetDesc(), outDesc = output->GetDesc();
     const auto active = PreSrColorExtent(inDesc,
         UInt(source, NVSDK_NGX_Parameter_DLSS_Render_Subrect_Dimensions_Width),
@@ -330,7 +330,7 @@ void Before(ID3D12GraphicsCommandList* cmd, NVSDK_NGX_Parameter* source,
     if (!active || !PreSrColorExtent(outDesc, 0, 0) || inDesc.MipLevels != 1 || outDesc.MipLevels != 1 ||
         active->width > outDesc.Width || active->height > outDesc.Height)
     {
-        Say("inactive: unsupported active input/output dimensions");
+        Say("未启用: 不支持的当前输入/输出尺寸");
         return;
     }
     ID3D12Device* device = nullptr;
@@ -342,7 +342,7 @@ void Before(ID3D12GraphicsCommandList* cmd, NVSDK_NGX_Parameter* source,
     {
         if (queueDevice) queueDevice->Release();
         device->Release();
-        Say("waiting for a same-device direct queue identity");
+        Say("正在等待同设备的直接队列标识");
         return;
     }
     queueDevice->Release();
@@ -360,7 +360,7 @@ void Before(ID3D12GraphicsCommandList* cmd, NVSDK_NGX_Parameter* source,
         retired.push_back(std::move(current));
     if (!current)
     {
-        if (retired.size() >= 4) { device->Release(); Say("waiting for retired GPU work; clean SR frame retained"); return; }
+        if (retired.size() >= 4) { device->Release(); Say("正在等待退役的 GPU 工作完成；保留干净的 SR 帧"); return; }
         current = std::make_unique<Generation>();
         current->device = device; // take the GetDevice reference
         current->queue = ownerQueue;
@@ -371,7 +371,7 @@ void Before(ID3D12GraphicsCommandList* cmd, NVSDK_NGX_Parameter* source,
         current->halfRequested = wantsHalf;
         current->sampleAndHold = sampleAndHold;
         current->approximateCamera = cfg.DlssNrResidualFgApproxCamera.value_or_default();
-        if (!Allocate(*current)) { current->failed = true; Say("allocation failed; clean SR frame retained"); return; }
+        if (!Allocate(*current)) { current->failed = true; Say("分配失败；保留干净的 SR 帧"); return; }
     }
     else device->Release();
     auto& g = *current;
@@ -379,11 +379,11 @@ void Before(ID3D12GraphicsCommandList* cmd, NVSDK_NGX_Parameter* source,
     // Native seams have a logical per-evaluate identity. Bridges retain the submitted epoch
     // so a second upscale in the same bridge submission is still rejected.
     if (g.began && g.lastBeginEpoch == epoch)
-    { g.reset = true; Say("inactive: more than one upscale in a submission epoch"); return; }
+    { g.reset = true; Say("未启用: 一个提交周期内出现多次放大"); return; }
     g.began = true;
     g.lastBeginEpoch = epoch;
     Use use(g, cmd);
-    if (!use.valid) { Say("waiting for GPU completion slots; clean SR frame retained"); return; }
+    if (!use.valid) { Say("正在等待 GPU 完成槽位；保留干净的 SR 帧"); return; }
     if (!g.feature)
     {
         ScopedNrStateEnvelope envelope(cmd);
@@ -391,7 +391,7 @@ void Before(ID3D12GraphicsCommandList* cmd, NVSDK_NGX_Parameter* source,
             !NVNGXProxy::D3D12_DestroyParameters() || !NVNGXProxy::D3D12_CreateFeature() ||
             !NVNGXProxy::D3D12_EvaluateFeature() || !NVNGXProxy::D3D12_ReleaseFeature() ||
             NVNGXProxy::D3D12_AllocateParameters()(&g.parameters) != NVSDK_NGX_Result_Success || !g.parameters)
-        { g.failed = true; Say("NVIDIA DLSS SR runtime unavailable; no alternative upscaler used"); return; }
+        { g.failed = true; Say("NVIDIA DLSS SR 运行时不可用；未使用替代超分器"); return; }
         auto* p = g.parameters;
         p->Set(NVSDK_NGX_Parameter_Width, g.w); p->Set(NVSDK_NGX_Parameter_Height, g.h);
         p->Set(NVSDK_NGX_Parameter_OutWidth, g.outW); p->Set(NVSDK_NGX_Parameter_OutHeight, g.outH);
@@ -403,10 +403,10 @@ void Before(ID3D12GraphicsCommandList* cmd, NVSDK_NGX_Parameter* source,
         p->Set(NVSDK_NGX_Parameter_DLSS_Feature_Create_Flags, g.flags);
         const auto result = NVNGXProxy::D3D12_CreateFeature()(cmd, NVSDK_NGX_Feature_SuperSampling, p, &g.feature);
         if (result != NVSDK_NGX_Result_Success || !g.feature)
-        { g.failed = true; Say("private DLSS creation failed: " + std::to_string((unsigned)result)); return; }
+        { g.failed = true; Say("私有 DLSS 创建失败: " + std::to_string((unsigned)result)); return; }
         DlssNrConstants unit {}; unit.Mode = DlssNrMode_UnitExposure; unit.Width = unit.Height = 1;
         if (!g.codec->DispatchPass(cmd, unit, g.edited, nullptr, nullptr, nullptr, nullptr, g.exposure, nullptr))
-        { g.failed = true; Say("private exposure initialization failed"); return; }
+        { g.failed = true; Say("私有曝光初始化失败"); return; }
         Barrier(cmd, g.exposure, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         if (g.sampleAndHold)
         {
@@ -414,11 +414,11 @@ void Before(ID3D12GraphicsCommandList* cmd, NVSDK_NGX_Parameter* source,
             unit.Mode = DlssNrMode_ZeroMotion; unit.Width = g.w; unit.Height = g.h;
             if (!g.zeroMotion || !g.codec->DispatchPass(cmd, unit, g.edited, nullptr, nullptr, nullptr,
                                                        nullptr, g.zeroMotion, nullptr))
-            { g.failed = true; Say("sample-and-hold guide initialization failed"); return; }
+            { g.failed = true; Say("采样保持引导初始化失败"); return; }
             Barrier(cmd, g.zeroMotion, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         }
         g.createEpoch = submittedEpoch;
-        Say("private DLSS created; waiting for a later submission epoch");
+        Say("私有 DLSS 已创建；正在等待后续提交周期");
         return;
     }
     // Synthetic seam ticks cannot prove that a feature's creation commands were submitted.
@@ -528,7 +528,7 @@ void Before(ID3D12GraphicsCommandList* cmd, NVSDK_NGX_Parameter* source,
                       frame.PreExposure, frame.Reset);
         }
     }
-    else { g.reset = true; Say("waiting for NR evaluation; clean SR frame retained"); }
+    else { g.reset = true; Say("正在等待 NR 求值；保留干净的 SR 帧"); }
     Barrier(cmd, g.edited, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
@@ -547,7 +547,7 @@ bool ResolvePrivate(ID3D12GraphicsCommandList* cmd, NVSDK_NGX_Parameter* source,
     if (!use.valid) { g.reset = true; return false; }
     const auto result = NVNGXProxy::D3D12_EvaluateFeature()(cmd, g.feature, g.parameters, nullptr);
     if (result != NVSDK_NGX_Result_Success)
-    { g.failed = true; Say("asynchronous residual DLSS evaluation failed"); return false; }
+    { g.failed = true; Say("异步残差 DLSS 求值失败"); return false; }
     Barrier(cmd, g.residualOutput, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
     Barrier(cmd, destination, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
     cmd->CopyResource(destination, g.residualOutput);
@@ -577,15 +577,15 @@ void After(ID3D12GraphicsCommandList* cmd, NVSDK_NGX_Parameter* source, unsigned
     const auto& cfg = *Config::Instance();
     if ((cfg.RestoreComputeSignature.value_or_default() || cfg.RestoreGraphicSignature.value_or_default()) &&
         !D3D12Hooks::CanRestoreRootSignature(cmd))
-    { g.reset = true; Say("inactive: game state cannot be restored after SR"); return; }
+    { g.reset = true; Say("未启用: 超分后无法恢复游戏状态"); return; }
     Use use(g, cmd);
-    if (!use.valid) { g.reset = true; Say("waiting for GPU completion slots; clean SR frame retained"); return; }
+    if (!use.valid) { g.reset = true; Say("正在等待 GPU 完成槽位；保留干净的 SR 帧"); return; }
     ScopedNrStateEnvelope envelope(cmd);
     if (!pair.skipNr)
     {
         const auto result = NVNGXProxy::D3D12_EvaluateFeature()(cmd, g.feature, g.parameters, nullptr);
         if (result != NVSDK_NGX_Result_Success)
-        { g.failed = true; if (g.half) g.half->Reset(); Say("private DLSS evaluation failed: " + std::to_string((unsigned)result)); return; }
+        { g.failed = true; if (g.half) g.half->Reset(); Say("私有 DLSS 求值失败: " + std::to_string((unsigned)result)); return; }
     }
     if (g.reset)
         LOG_DEBUG("DLSS-NR deferred: After fed Reset=1 to the private DLSS SR this frame (history restart). "
@@ -598,8 +598,8 @@ void After(ID3D12GraphicsCommandList* cmd, NVSDK_NGX_Parameter* source, unsigned
         const bool sceneLinear = (UInt(source, NVSDK_NGX_Parameter_DLSS_Feature_Create_Flags) &
             NVSDK_NGX_DLSS_Feature_Flags_IsHDR) != 0 && FormatCanHoldLinearHdr(g.outputFormat);
         if (Late::CaptureResidual(cmd, pair.output, g.residualOutput, pair.scale, sceneLinear))
-            Say("running: model before SR; changes saved for the finished picture");
-        else { g.reset = true; Say("waiting to save the upscaled changes for the finished picture"); }
+            Say("运行中: 模型在超分前运行；变化量已保存供成品画面使用");
+        else { g.reset = true; Say("正在等待保存放大后的变化量以供成品画面使用"); }
         return; // Keep the game's SR output clean: no early composition and no second NR evaluation.
     }
 
@@ -681,13 +681,13 @@ void After(ID3D12GraphicsCommandList* cmd, NVSDK_NGX_Parameter* source, unsigned
         cmd->CopyResource(pair.output, g.composed);
         Barrier(cmd, pair.output, D3D12_RESOURCE_STATE_COPY_DEST, arrival);
         Barrier(cmd, g.composed, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        Say(g.sampleAndHold ? "running: sample-and-hold (motion unavailable); each NR residual applied to 2 current frames; no residual FG or SR delay" :
-            half ? "running: NR every second frame + NVIDIA residual FG; SR delayed 1 frame; APPROXIMATE camera guides" :
-            "running: " + std::to_string(g.w) + "x" + std::to_string(g.h) + " contribution -> private DLSS -> " +
-            std::to_string(g.outW) + "x" + std::to_string(g.outH) + "; applied after SR" +
-            (g.halfRequested ? "; residual FG inactive: " + g.halfStatus : ""));
+        Say(g.sampleAndHold ? "运行中: 采样保持（运动不可用）；每个 NR 残差应用到 2 个当前帧；无残差帧生成或 SR 延迟" :
+            half ? "运行中: 每两帧执行一次 NR + NVIDIA 残差帧生成；SR 延迟 1 帧；近似相机引导" :
+            "运行中: " + std::to_string(g.w) + "x" + std::to_string(g.h) + " 贡献 -> 私有 DLSS -> " +
+            std::to_string(g.outW) + "x" + std::to_string(g.outH) + "；在超分后应用" +
+            (g.halfRequested ? "；残差帧生成未启用: " + g.halfStatus : ""));
     }
-    else { Barrier(cmd, pair.output, D3D12_RESOURCE_STATE_COPY_SOURCE, arrival); Say("composition failed; clean frame retained"); }
+    else { Barrier(cmd, pair.output, D3D12_RESOURCE_STATE_COPY_SOURCE, arrival); Say("合成失败；保留干净的帧"); }
     Barrier(cmd, g.clean, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     Barrier(cmd, g.residualOutput, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     if (g.sampleAndHold)
@@ -733,7 +733,7 @@ std::string SynchronousDeferredDlssStatus()
     if (DeferredSr::current && DeferredSr::current->half && DeferredSr::current->half->havePrevious)
     {
         const auto& h = *DeferredSr::current->half;
-        result += " (NR frames " + std::to_string(h.nrAnchors) + ", skipped " + std::to_string(h.skippedNr) + ")";
+        result += "（NR 帧数 " + std::to_string(h.nrAnchors) + "，跳过 " + std::to_string(h.skippedNr) + ")";
     }
     return result;
 }

@@ -68,14 +68,14 @@ static void RenderTrimEvSlider(CustomOptional<float>& trim, float neutral, size_
     float ev = std::clamp(TrimToEv(shown, neutral), minEv, maxEv);
 
     ImGui::BeginDisabled(anchorCount > 0);
-    const std::string sliderLabel = std::string("Model input brightness##") + idSuffix;
+    const std::string sliderLabel = std::string("模型输入亮度##") + idSuffix;
     if (ImGui::SliderFloat(sliderLabel.c_str(), &ev, minEv, maxEv, "%+.1f EV"))
         trim = EvToTrim(ev, neutral);
 
     ImGui::SameLine();
 
     // Deliberately always present rather than greyed at 0 EV: the safe value is one click away.
-    const std::string resetLabel = std::string("Reset##") + idSuffix;
+    const std::string resetLabel = std::string("重置##") + idSuffix;
     if (ImGui::SmallButton(resetLabel.c_str()))
     {
         if (detectedDefault.has_value())
@@ -88,7 +88,7 @@ static void RenderTrimEvSlider(CustomOptional<float>& trim, float neutral, size_
     HelpMarker(tip);
 
     if (anchorCount > 0)
-        ImGui::TextDisabled("%u brightness anchor point(s) from the ini are in use; the slider has no effect while they exist.",
+        ImGui::TextDisabled("ini 中有 %u 个亮度锚点正在使用；在它们存在期间该滑块无效。",
                             (unsigned int) anchorCount);
 }
 
@@ -144,7 +144,7 @@ static bool DeferredSlider(const char* label, Option* opt, float mn, float mx,
 
     ImGui::SameLine();
 
-    const std::string resetId = std::string("Reset##") + label;
+    const std::string resetId = std::string("重置##") + label;
     if (ImGui::SmallButton(resetId.c_str()))
     {
         if (inheritReset)
@@ -155,14 +155,14 @@ static bool DeferredSlider(const char* label, Option* opt, float mn, float mx,
         changed = true;
     }
 
-    if (std::strcmp(label, "Intensity") == 0)
-        HelpMarker("Overall enhancement strength for this pass. 1 = default; results depend on the profile.\nValues above 1 are experimental; the runtime may clamp or ignore them.");
-    else if (std::strcmp(label, "Local structure") == 0)
-        HelpMarker("Fine detail and local contrast requested from the model (high-frequency structure).\n1 = default; values above 1 are experimental.");
-    else if (std::strcmp(label, "Local tone") == 0)
-        HelpMarker("Broad brightness and lighting changes requested from the model (low-frequency tone).\nLater passes default to 0. Values above 1 are experimental.");
-    else if (std::strcmp(label, "Skin structure") == 0)
-        HelpMarker("Fine detail for pixels the model identifies as skin. -1 follows Local structure; 0 reduces skin detail.\nSkin colour is controlled separately. Values above 1 are experimental.");
+    if (std::strcmp(label, "强度") == 0)
+        HelpMarker("本通道的整体增强强度。1 = 默认；效果取决于配置文件。\n高于 1 的数值为实验性；运行时可能将其限制或忽略。");
+    else if (std::strcmp(label, "局部结构") == 0)
+        HelpMarker("向模型请求的精细细节与局部对比度（高频结构）。\n1 = 默认；高于 1 的数值为实验性。");
+    else if (std::strcmp(label, "局部色调") == 0)
+        HelpMarker("向模型请求的整体亮度与光照变化（低频色调）。\n后续通道默认为 0。高于 1 的数值为实验性。");
+    else if (std::strcmp(label, "皮肤结构") == 0)
+        HelpMarker("模型判定为皮肤的像素的精细细节。-1 跟随局部结构；0 减少皮肤细节。\n皮肤颜色单独控制。高于 1 的数值为实验性。");
     return changed;
 }
 
@@ -343,10 +343,10 @@ struct ResolutionTier
 };
 
 static constexpr ResolutionTier ResolutionTiers[] = {
-    { "High",   1u, 1.00f, 1u, -1.0f, 1.0f, 1.0f },
-    { "Medium", 1u, 0.80f, 2u,  1.50f, -1.0f, -1.0f },
-    { "Low",    0u, 0.65f, 2u,  1.50f, -1.0f, -1.0f },
-    { "Potato", 0u, 0.50f, 2u,  1.70f, -1.0f, -1.0f },
+    { "高",   1u, 1.00f, 1u, -1.0f, 1.0f, 1.0f },
+    { "中", 1u, 0.80f, 2u,  1.50f, -1.0f, -1.0f },
+    { "低",    0u, 0.65f, 2u,  1.50f, -1.0f, -1.0f },
+    { "土豆", 0u, 0.50f, 2u,  1.70f, -1.0f, -1.0f },
 };
 
 static void ApplyResolutionTier(Config* config, int& pendingScale, const ResolutionTier& tier,
@@ -397,7 +397,7 @@ void RenderMenu(Config* config, float menuResScale)
 
     // DLSS Neural Rendering -----------------------------
     ImGui::Spacing();
-    if (auto ch = ScopedCollapsingHeader("DLSS Neural Rendering"); ch.IsHeaderOpen())
+    if (auto ch = ScopedCollapsingHeader("DLSS 神经渲染"); ch.IsHeaderOpen())
     {
         ScopedIndent indent {};
         ImGui::Spacing();
@@ -409,10 +409,10 @@ void RenderMenu(Config* config, float menuResScale)
         static int pendingScale = -1;
 
         bool enabled = config->DlssNrEnabled.value_or_default();
-        if (ImGui::Checkbox("Enable Neural Rendering", &enabled))
+        if (ImGui::Checkbox("启用神经渲染", &enabled))
             config->DlssNrEnabled = enabled;
 
-        HelpMarker("Enhance lighting and material appearance with the NR model. Placement selects before or after upscaling.\nRequires nvngx_dlssnr.dll plus the included nvngx.dll_dlssnr.dll helper.");
+        HelpMarker("使用 NR 模型增强光照与材质表现。「放置位置」决定在超分之前还是之后。\n需要 nvngx_dlssnr.dll 以及随附的 nvngx.dll_dlssnr.dll 辅助文件。");
 
         // Read early (checkbox itself is drawn down in NR Options) so the running-status block
         // right below can already report finished-picture-specific text.
@@ -429,7 +429,7 @@ void RenderMenu(Config* config, float menuResScale)
         // moment it describes the frame before last.
         if (!enabled)
         {
-            ImGui::TextDisabled("NR off.");
+            ImGui::TextDisabled("NR 关闭。");
         }
         else if (!DlssNr::IsRunning() && !vulkan)
         {
@@ -439,24 +439,24 @@ void RenderMenu(Config* config, float menuResScale)
 
             if (reason[0] != 0)
             {
-                ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.35f, 1.0f), "Off for this session: %s.", reason);
+                ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.35f, 1.0f), "本次会话已关闭：%s。", reason);
                 ImGui::SameLine();
 
                 if (nativeVk)
-                    ImGui::TextUnformatted("Restart the game to retry native Vulkan NR.");
-                else if (ImGui::SmallButton("Retry"))
+                    ImGui::TextUnformatted("重启游戏以重试原生 Vulkan NR。");
+                else if (ImGui::SmallButton("重试"))
                     DlssNr::RetryAfterFailure();
             }
             else if (feature && feature->Api() == API::DX11 && !feature->IsWithDx12())
             {
-                ImGui::TextWrapped("NR needs the D3D12 bridge on D3D11. Choose an upscaler marked w/Dx12 and restart.");
+                ImGui::TextWrapped("在 D3D11 下 NR 需要 D3D12 桥接。请选择标记为 w/Dx12 的超分器并重启。");
             }
             else if (nativeVk && config->DlssNrDeferredDlss.value_or_default())
             {
-                ImGui::TextWrapped("Disable Generate before SR, apply after SR (DLSS) to use native Vulkan NR.");
+                ImGui::TextWrapped("禁用「超分前生成，超分后应用 (DLSS)」即可使用原生 Vulkan NR。");
             }
             else if (enabled)
-                ImGui::TextUnformatted("Waiting for the upscaler to run.");
+                ImGui::TextUnformatted("等待超分器运行。");
         }
         else
         {
@@ -471,46 +471,39 @@ void RenderMenu(Config* config, float menuResScale)
             // a frozen frame) -- it only outputs the clean frame.
             // Enable Neural Rendering off stops the work.
             const char* runSuffix =
-                !config->DlssNrApplyModel.value_or_default() ? "  (model running, edit hidden)" : "";
+                !config->DlssNrApplyModel.value_or_default() ? "  （模型运行中，效果已隐藏）" : "";
 
             if (ms.has_value())
-                ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.5f, 1.0f), "Running%s - %.2f ms elapsed%s",
-                                   vulkan ? " natively on Vulkan" : "", ms.value(), runSuffix);
+                ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.5f, 1.0f), "运行中%s - 已耗时 %.2f ms%s",
+                                   vulkan ? " 原生 Vulkan" : "", ms.value(), runSuffix);
             else if (vulkan)
                 // Measured but not yet read: the first few frames are still in the query ring.
-                ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.5f, 1.0f), "Running natively on Vulkan - %llu frames%s",
+                ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.5f, 1.0f), "原生运行于 Vulkan - %llu 帧%s",
                                    DlssNr::FramesVk(), runSuffix);
             else
-                ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.5f, 1.0f), "Running.%s", runSuffix);
+                ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.5f, 1.0f), "运行中.%s", runSuffix);
 
             ImGui::SameLine();
             ImGui::TextDisabled("(?)");
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-                ImGui::SetTooltip("Time between the start and end of NR on the GPU, including delays while other work runs.\nCompare FPS to check the effect on game performance.");
+                ImGui::SetTooltip("NR 在 GPU 上从开始到结束的时间，包含其他工作运行时的等待。\n对比 FPS 以了解对游戏性能的影响。");
             if (finishedPicture)
-                ImGui::TextDisabled("Includes time shared with other GPU work.");
+                ImGui::TextDisabled("包含与其他 GPU 工作共用的时间。");
 
             if (!vulkan && DlssNr::BackendName()[0] != 0)
-                ImGui::TextDisabled("Model backend: %s", DlssNr::BackendName());
+                ImGui::TextDisabled("模型后端: %s", DlssNr::BackendName());
         }
 
-        ImGui::SeparatorText("Multipass Presets");
-        if (PresetButton("1 Pass", PassPresetActive(config, 1u)))
+        ImGui::SeparatorText("多遍预设");
+        if (PresetButton("1 遍", PassPresetActive(config, 1u)))
             ApplyPassPreset(config, 1u);
         ImGui::SameLine();
-        if (PresetButton("2 Pass", PassPresetActive(config, 2u)))
+        if (PresetButton("2 遍", PassPresetActive(config, 2u)))
             ApplyPassPreset(config, 2u);
         ImGui::SameLine();
-        if (PresetButton("3 Pass", PassPresetActive(config, 3u)))
+        if (PresetButton("3 遍", PassPresetActive(config, 3u)))
             ApplyPassPreset(config, 3u);
-        HelpMarker("Set this fork's recommended starting point for the chosen pass count: FP8 "
-                   "precision and game-exposure white point. "
-                   "Upscale Method, Upscale Mode and Final Image Composition are left alone; use the Pre-SR or "
-                   "Post-SR presets for those. 2 Pass also sets Pass "
-                   "2's overrides; 3 Pass sets Pass 2 and Pass 3's overrides. Overwrites the settings "
-                   "below; anything not listed here, including NR Pass at:, is left as you have it.\n"
-                   "The green button is the pass count currently in effect; changing the pass count "
-                   "or a pass's Style, Intensity, Local structure, Local tone or Skin structure clears it.");
+        HelpMarker("为所选遍数套用本分支推荐的起点：FP8 精度与游戏曝光白点。「放大方式」「放大模式」和「最终图像合成」保持不变；\n这些请使用超分前或超分后预设。2 遍还会设置第 2 遍的覆盖项；3 遍会设置第 2 遍和第 3 遍的覆盖项。\n会覆盖下方的设置；此处未列出的项目，包括「NR 遍位于:」，一律保持你的当前设置。\n绿色按钮表示当前生效的遍数；更改遍数，或更改某一遍的「风格」「强度」「局部结构」「局部色调」或「皮肤结构」，都会清除它。");
 
         // Directly under the pass presets, since those buttons set this slider's value. The
         // panel-wide item width is pushed further down (after NR Options), so this block pushes
@@ -532,8 +525,8 @@ void RenderMenu(Config* config, float menuResScale)
             ImGui::PushStyleColor(ImGuiCol_Text, colour);
             ImGui::PushStyleColor(ImGuiCol_SliderGrab, colour);
 
-            if (ImGui::SliderInt("Model passes", &passes, 1, (int) passLimit,
-                                 passes == 1 ? "%d (normal)" : "%dx model cost"))
+            if (ImGui::SliderInt("模型遍数", &passes, 1, (int) passLimit,
+                                 passes == 1 ? "%d（普通）" : "%dx 模型开销"))
                 config->DlssNrPasses = (uint32_t) std::clamp(passes, 1, (int) passLimit);
 
             ImGui::PopStyleColor(2);
@@ -541,10 +534,10 @@ void RenderMenu(Config* config, float menuResScale)
             // Reset's own label stays plain text -- placed after PopStyleColor so the
             // passes-based warning colour above doesn't tint it too.
             ImGui::SameLine();
-            if (ImGui::SmallButton("Reset##modelpasses"))
+            if (ImGui::SmallButton("重置##modelpasses"))
                 config->DlssNrPasses = 1u;
 
-            HelpMarker("Process the image repeatedly. More passes strengthen the effect and increase GPU cost.\nEach pass has its own settings and history. Start with 1.");
+            HelpMarker("对图像重复处理。遍数越多，效果越强，GPU 开销也越大。\n每一遍都有各自的设置和历史。建议从 1 开始。");
         }
 
         {
@@ -554,21 +547,15 @@ void RenderMenu(Config* config, float menuResScale)
             const bool noBoundary = config->DlssNrPasses.value_or_default() <= 1;
             ImGui::BeginDisabled(noBoundary);
             float feedback = config->DlssNrPassFeedback.value_or_default();
-            if (ImGui::SliderFloat("Pass feedback", &feedback, 0.0f, 1.0f,
-                                   feedback >= 1.0f ? "%.2f (full, current behaviour)" : "%.2f"))
+            if (ImGui::SliderFloat("通道反馈", &feedback, 0.0f, 1.0f,
+                                   feedback >= 1.0f ? "%.2f（完整，当前行为）" : "%.2f"))
                 config->DlssNrPassFeedback = std::clamp(feedback, 0.0f, 1.0f);
             ImGui::SameLine();
-            if (ImGui::SmallButton("Reset##passfeedback"))
+            if (ImGui::SmallButton("重置##passfeedback"))
                 config->DlssNrPassFeedback = 1.0f;
             ImGui::EndDisabled();
 
-            HelpMarker("How much of an extra pass's raw answer the next pass actually receives.\n\n"
-                       "1.0 is what every configuration has always done: the next pass gets the full "
-                       "answer. Every pass after the first is already being shown something the model "
-                       "was never trained on -- its own previous output instead of a raw frame -- so "
-                       "lower values hold each pass closer to that training distribution instead of "
-                       "drifting further from it with every extra pass, at the cost of a smaller "
-                       "cumulative edit.\n\nNo effect at Passes = 1: there is no boundary to damp.");
+            HelpMarker("下一遍实际接收到上一遍原始结果的比例。\n" "\n" "1.0 是所有配置一直以来的行为：下一遍拿到完整结果。第一遍之后的每一遍，\n" "看到的都是模型从未训练过的输入——它自己上一次的输出，而不是原始帧——\n" "因此数值越低，各遍就越贴近该训练分布，而不会随着每增加一遍越漂越远，代价是累积编辑量更小。\n" "\n" "遍数 = 1 时无效：没有边界需要抑制。");
         }
 
         ImGui::PopItemWidth();
@@ -587,22 +574,16 @@ void RenderMenu(Config* config, float menuResScale)
             ImGui::PopID();
         };
 
-        ImGui::SeparatorText("Pre-SR Presets");
+        ImGui::SeparatorText("超分前预设");
         tierRow("pre", true);
-        HelpMarker("Quality tiers for running NR before Super Resolution at a lower model resolution, from High (100%, best quality) down to Potato (50%, cheapest).\n"
-                   "Each sets Upscale Mode, Upscale Method, Model resolution and Final Image Composition (High also sets Detail and Colour strength to 1; Medium, Low and Potato also set Restore Sharpness), and turns Auto model resolution off so the resolution applies.\n"
-                   "It also sets NR Pass at: to Before Super Resolution. Anything not listed here is left as you have it.\n"
-                   "The green button is the tier currently in effect; changing NR Pass at:, Upscale Mode, Upscale Method, Model resolution or Final Image Composition clears it.");
+        HelpMarker("用于在超分辨率之前以较低模型分辨率运行 NR 的画质档位，从 High（100%，最佳画质）到 Potato（50%，最省性能）。\n每档都会设置「放大模式」「放大方式」「模型分辨率」和「最终图像合成」（High 还会把「细节」和「色彩强度」设为 1；Medium、Low 和 Potato 还会设置「恢复锐度」），\n并关闭「自动模型分辨率」以使分辨率生效。\n它还会把「NR 遍位于:」设为「超分辨率之前」。此处未列出的项目一律保持你的当前设置。\n绿色按钮表示当前生效的档位；更改「NR 遍位于:」「放大模式」「放大方式」「模型分辨率」或「最终图像合成」都会清除它。");
 
-        ImGui::SeparatorText("Post-SR Presets");
+        ImGui::SeparatorText("超分后预设");
         tierRow("post", false);
-        HelpMarker("Quality tiers for running NR after Super Resolution at a lower model resolution, from High (100%, best quality) down to Potato (50%, cheapest).\n"
-                   "Each sets Upscale Mode, Upscale Method, Model resolution and Final Image Composition (High also sets Detail and Colour strength to 1; Medium, Low and Potato also set Restore Sharpness), and turns Auto model resolution off so the resolution applies.\n"
-                   "It also sets NR Pass at: to After Super Resolution. Anything not listed here is left as you have it.\n"
-                   "The green button is the tier currently in effect; changing NR Pass at:, Upscale Mode, Upscale Method, Model resolution or Final Image Composition clears it.");
+        HelpMarker("用于在超分辨率之后以较低模型分辨率运行 NR 的画质档位，从 High（100%，最佳画质）到 Potato（50%，最省性能）。\n每档都会设置「放大模式」「放大方式」「模型分辨率」和「最终图像合成」（High 还会把「细节」和「色彩强度」设为 1；Medium、Low 和 Potato 还会设置「恢复锐度」），\n并关闭「自动模型分辨率」以使分辨率生效。\n它还会把「NR 遍位于:」设为「超分辨率之后」。此处未列出的项目一律保持你的当前设置。\n绿色按钮表示当前生效的档位；更改「NR 遍位于:」「放大模式」「放大方式」「模型分辨率」或「最终图像合成」都会清除它。");
 
-        ImGui::SeparatorText("HDR Input");
-        ImGui::TextDisabled("HDR input settings. Adjust the brightness range presented to NR.");
+        ImGui::SeparatorText("HDR 输入");
+        ImGui::TextDisabled("HDR 输入设置。调整呈现给 NR 的亮度范围。");
 
         {
         // Logarithmic, because the useful range is not linear. A quarter to 240: the low end because
@@ -630,16 +611,16 @@ void RenderMenu(Config* config, float menuResScale)
             const float anchorNow = DlssNr::ExposureScan::BestValue();
             const bool haveAnchor = !DlssNr::ExposureScan::Anchors().empty();
 
-            static const char* sourceNames[] = { "Manual paper white", "Game exposure",
-                                                 "Scanned exposure (experimental)",
-                                                 "Automatic exposure from HDR frame" };
+            static const char* sourceNames[] = { "手动纸白", "游戏曝光",
+                                                 "扫描曝光（实验性）",
+                                                 "来自 HDR 帧的自动曝光" };
 
             int source = (int) config->DlssNrWhitePointSource.value_or_default();
 
             if (source < 0 || source > 3)
                 source = 0;
 
-            if (ImGui::Combo("White point source", &source, sourceNames, IM_ARRAYSIZE(sourceNames)))
+            if (ImGui::Combo("白点来源", &source, sourceNames, IM_ARRAYSIZE(sourceNames)))
             {
                 config->DlssNrWhitePointSource = (uint32_t) source;
 
@@ -648,16 +629,16 @@ void RenderMenu(Config* config, float menuResScale)
                 // step, and so no way for the two to disagree.
             }
 
-            HelpMarker("Manual: use Paper white. Game exposure: use exposure supplied by the game.\nScanned exposure: estimate it from game buffers; requires calibration and may select the wrong buffer.\nAutomatic exposure: OptiScaler meters the linear HDR frame itself, so it needs nothing from the game.");
+            HelpMarker("手动：使用「纸白」。游戏曝光：使用游戏提供的曝光值。\n扫描曝光：从游戏缓冲区估算；需要校准，且可能选错缓冲区。\n自动曝光：OptiScaler 自行测量线性 HDR 帧，因此无需游戏提供任何信息。");
 
             // Availability, in colour, for the option currently chosen.
             if (source == 1)
             {
                 if (!vk && ex.seenFrames == 0)
-                    ImGui::TextDisabled("Waiting for a frame...");
+                    ImGui::TextDisabled("等待帧…");
                 else if (!haveExposure)
                     ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.25f, 1.0f),
-                                       "No game exposure available. Using manual paper white.");
+                                       "无可用游戏曝光。使用手动纸白。");
                 else if (ex.exposure > 1e-6f)
                 {
                     const float baseWhitePoint = ex.preExposure / ex.exposure;
@@ -666,12 +647,12 @@ void RenderMenu(Config* config, float menuResScale)
                     const float trim = DlssNrTrim::TrimForKey(
                         baseWhitePoint, config->DlssNrWhitePointTrim.value_or_default(), trimAnchors, false);
                     ImGui::TextColored(ImVec4(0.45f, 0.8f, 0.45f, 1.0f),
-                                       "Game exposure %.4f  ->  model white at %.2f%s", ex.exposure,
+                                       "游戏曝光 %.4f  ->  模型白点 %.2f%s", ex.exposure,
                                        baseWhitePoint * trim,
-                                       ex.offeredNow ? "" : "  (held: absent this frame)");
+                                       ex.offeredNow ? "" : "  （保持：本帧缺失）");
                 }
                 else
-                    ImGui::TextDisabled("Reading exposure...");
+                    ImGui::TextDisabled("正在读取曝光...");
             }
             else if (source == 3)
             {
@@ -686,14 +667,13 @@ void RenderMenu(Config* config, float menuResScale)
                         baseWhitePoint, DlssNr::AutoTrimEffective(*config), trimAnchors, false);
                     // Middle-grey metering, mode 13 in dlssnr.hlsl: exposure = 0.18 / (0.82 * average scene brightness).
                     ImGui::TextColored(ImVec4(0.45f, 0.8f, 0.45f, 1.0f),
-                                       "Scene brightness %.3f  ->  model white at %.2f",
+                                       "场景亮度 %.3f  ->  模型白点 %.2f",
                                        0.18f / (0.82f * autoEx.exposure), baseWhitePoint * trim);
-                    HelpMarker("Measured from the linear HDR frame before NR runs (raw exposure value shown below).\n"
-                               "Model white is the brightness level the picture is scaled to: anything at or above it counts as full white.");
-                    ImGui::TextDisabled("Automatic exposure %.4f", autoEx.exposure);
+                    HelpMarker("在 NR 运行前从线性 HDR 帧测得（原始曝光值见下方）。\n" "模型白点是把画面缩放到的亮度水平：达到或超过它的都算作纯白。");
+                    ImGui::TextDisabled("自动曝光 %.4f", autoEx.exposure);
                 }
                 else
-                    ImGui::TextDisabled("Calculating automatic exposure...");
+                    ImGui::TextDisabled("正在计算自动曝光...");
             }
             else if (source == 2)
             {
@@ -707,22 +687,22 @@ void RenderMenu(Config* config, float menuResScale)
 
                     if (watching == 0)
                         ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.25f, 1.0f),
-                                           "No exposure candidates found.");
+                                           "未找到曝光候选。");
                     else
                         ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.25f, 1.0f),
-                                           "%u candidates; move between bright and dark areas to test them.",
+                                           "%u 个候选；在明暗区域之间移动以测试它们。",
                                            watching);
                 }
                 else if (!haveAnchor)
                     ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.25f, 1.0f),
-                                       "Exposure candidate found. Adjust Paper white, then select Anchor here.");
+                                       "已找到曝光候选。调整「纸白」，然后选择「在此锚定」。");
                 // Once anchored, the scan -> white point readout sits above the sliders below; it is
                 // not repeated up here.
             }
             else if (haveExposure)
             {
                 ImGui::TextColored(ImVec4(0.45f, 0.8f, 0.45f, 1.0f),
-                                   "Game exposure is available.");
+                                   "游戏曝光可用。");
             }
         }
 
@@ -795,8 +775,8 @@ void RenderMenu(Config* config, float menuResScale)
                         config->DlssNrScanTrim.value_or_default());
 
                     ImGui::TextColored(ImVec4(0.45f, 0.8f, 0.45f, 1.0f),
-                                       "Scan %.5f  ->  white point %.2f   (%u point%s)", liveScan, w,
-                                       (unsigned) anchors.size(), anchors.size() == 1 ? "" : "s");
+                                       "扫描 %.5f  ->  白点 %.2f   （%u 个点%s）", liveScan, w,
+                                       (unsigned) anchors.size(), anchors.size() == 1 ? "" : "");
                 }
             }
 
@@ -813,9 +793,9 @@ void RenderMenu(Config* config, float menuResScale)
 
                 char lbl[48];
                 if (editingRow)
-                    snprintf(lbl, sizeof(lbl), "Paper white (editing point %d)", selectedAnchor + 1);
+                    snprintf(lbl, sizeof(lbl), "纸白（正在编辑点 %d）", selectedAnchor + 1);
                 else
-                    snprintf(lbl, sizeof(lbl), "Paper white");
+                    snprintf(lbl, sizeof(lbl), "纸白");
 
                 if (ImGui::SliderFloat(lbl, &pw, 0.25f, 2000.0f, "%.2fx", ImGuiSliderFlags_Logarithmic))
                 {
@@ -828,7 +808,7 @@ void RenderMenu(Config* config, float menuResScale)
                         config->DlssNrWhitePointScale = pw;
                 }
 
-                HelpMarker("Adjust the selected calibration point, or set the value for the next point.\nUse Anchor here to save the current lighting condition.");
+                HelpMarker("调整所选的校准点，或为下一个点设定数值。\n使用「在此锚定」保存当前光照条件。");
             }
 
             // The trim multiplies the interpolated result, and in the steady state it is the control
@@ -838,16 +818,16 @@ void RenderMenu(Config* config, float menuResScale)
             {
                 float trim = config->DlssNrScanTrim.value_or_default();
 
-                if (ImGui::SliderFloat("Trim (x the scan)", &trim, 0.25f, 4.0f, "%.2fx",
+                if (ImGui::SliderFloat("微调 (× 扫描值)", &trim, 0.25f, 4.0f, "%.2fx",
                                        ImGuiSliderFlags_Logarithmic))
                     config->DlssNrScanTrim = std::clamp(trim, 0.25f, 4.0f);
 
                 ImGui::SameLine();
 
-                if (ImGui::SmallButton("Reset##scantrim"))
+                if (ImGui::SmallButton("重置##scantrim"))
                     config->DlssNrScanTrim = 1.0f;
 
-                HelpMarker("Multiply the calibrated white point. Anchor here saves the adjusted value and resets this multiplier to 1.");
+                HelpMarker("对已校准的白点进行倍乘。「在此锚定」会保存调整后的数值，并将此倍率重置为 1。");
             }
         }
         else if (wpSource == 1)
@@ -858,9 +838,7 @@ void RenderMenu(Config* config, float menuResScale)
             RenderTrimEvSlider(config->DlssNrWhitePointTrim, 1.0f,
                                DlssNrTrim::Parse(config->DlssNrGameExposureTrimAnchors.value_or_default()).size(),
                                "gameexposure",
-                               "Brightness of the picture handed to NR, relative to the exposure the game reports."
-                               "\n+ is brighter, - is darker; 0 EV uses the game's exposure as is."
-                               "\nToo bright clips highlights; too dark hides shadow detail.");
+                               "交给 NR 的画面亮度，相对于游戏报告的曝光值。\n" "+ 更亮，- 更暗；0 EV 直接沿用游戏的曝光值。\n" "过亮会裁切高光；过暗会掩盖阴影细节。");
         }
         else if (wpSource == 3)
         {
@@ -869,12 +847,7 @@ void RenderMenu(Config* config, float menuResScale)
             RenderTrimEvSlider(config->DlssNrAutoExposureTrim, 5.0f,
                                DlssNrTrim::Parse(config->DlssNrAutoExposureTrimAnchors.value_or_default()).size(),
                                "autoexposure",
-                               "Brightness of the picture handed to NR. + is brighter, - is darker."
-                               "\nUntil you move it, it is +1.5 EV in every game."
-                               "\nReset goes back to that default."
-                               "\nToo bright clips highlights or tints shadows; too dark hides shadow detail."
-                               "\nOptiScaler meters the linear HDR frame itself before NR runs."
-                               "\nAutomatic exposure is available on D3D12 and Vulkan.",
+                               "交给 NR 的画面亮度。+ 更亮，- 更暗。\n" "在你手动调整之前，它在所有游戏中都是 +1.5 EV。\n" "重置会恢复该默认值。\n" "过亮会裁切高光或使阴影偏色；过暗会掩盖阴影细节。\n" "OptiScaler 在 NR 运行前自行测量线性 HDR 帧。\n" "自动曝光在 D3D12 和 Vulkan 上可用。",
                                DlssNrAutoTrim::kDefaultTrim);
 
             // Following the game's own exposure (DlssNr_FollowGame.h): on by default for a known unexposed game
@@ -883,51 +856,41 @@ void RenderMenu(Config* config, float menuResScale)
                 const bool followVk = DlssNr::IsRunningVk();
                 bool follow = DlssNr::FollowGameOn(*config);
 
-                if (ImGui::Checkbox("Follow the game's exposure", &follow))
+                if (ImGui::Checkbox("跟随游戏的曝光", &follow))
                     config->DlssNrAutoExposureFollowGame = follow;
 
-                HelpMarker("For games that hand over their frame before applying their own exposure: on by default"
-                           "\nfor those known to (RDR2), off for every other game. Automatic learns how its own metering"
-                           "\nrelates to the game's exposure in the first seconds of play, then follows the game's exposure,"
-                           "\nso brightness moves exactly with the game: cutscenes, menus, fades. The brightness slider"
-                           "\nkeeps its meaning. Leave it off for games that expose their frame themselves (most games):"
-                           "\nit would apply their exposure twice. On Vulkan it follows a few frames behind the game.");
+                HelpMarker("适用于在应用自身曝光之前就把画面交出来的游戏：已知会这样做的游戏（如 RDR2）默认开启，\n其余游戏默认关闭。自动模式会在游玩最初几秒内学习自身测光与游戏曝光的关系，\n随后跟随游戏的曝光，因此亮度会与游戏完全同步：过场、菜单、淡入淡出。亮度滑块\n保持原有含义。对于自行处理曝光的游戏（大多数游戏）请保持关闭：\n否则会把它们的曝光叠加两次。在 Vulkan 上它会比游戏滞后几帧。");
 
                 const auto followStatus =
                     followVk ? DlssNr::FollowGameExposureStatusVk() : DlssNr::FollowGameExposureStatus();
                 const auto& calibration = DlssNrFollowGame::Instance();
 
                 if (!follow)
-                    ImGui::TextDisabled("Off");
+                    ImGui::TextDisabled("关闭");
                 else if (!followStatus.gameExposureSeen)
-                    ImGui::TextDisabled("Not available yet: no exposure from the game");
+                    ImGui::TextDisabled("暂不可用: 游戏未提供曝光");
                 else if (!calibration.Locked())
-                    ImGui::TextDisabled("Learning the calibration... (%u/%u)", calibration.Readings(),
+                    ImGui::TextDisabled("正在学习校准…（%u/%u）", calibration.Readings(),
                                         DlssNrFollowGame::kWindow);
                 else
-                    ImGui::TextDisabled("Calibration %+.2f EV against the game's exposure%s", calibration.OffsetEv(),
-                                        followStatus.following ? "; following" : "; not following");
+                    ImGui::TextDisabled("相对游戏曝光值的校准 %+.2f EV%s", calibration.OffsetEv(),
+                                        followStatus.following ? "；跟随中" : "；未跟随");
 
                 // The calibration is learned once per session; this learns it again.
-                if (ImGui::SmallButton("Re-calibrate##autoexposure"))
+                if (ImGui::SmallButton("重新校准##autoexposure"))
                 {
                     DlssNrFollowGame::Instance().Reset();
                     LOG_INFO("DLSS-NR automatic exposure: re-calibration requested");
                 }
 
-                HelpMarker("Learns the calibration against the game's exposure again, for example when it was"
-                           "\nlearned during a cutscene or a loading screen. Plain Automatic is used meanwhile (about 2 s)."
-                           "\nRe-calibrate in an ordinary daylight scene, not snow, night or indoors: the brightness"
-                           "\nlearned there is kept for the whole game.");
+                HelpMarker("重新学习与游戏曝光之间的校准关系，例如当校准是在过场动画或加载画面中\n" "学到的时候。此期间会暂时使用普通的自动模式（约 2 秒）。\n" "请在普通白天场景中重新校准，而不是雪地、夜晚或室内：在那里学到的亮度\n" "会在整个游戏过程中沿用。");
             }
 
             float protection = config->DlssNrAutoExposureShadowProtection.value_or_default();
-            if (ImGui::SliderFloat("Ignore bright highlights", &protection, 0.0f, 100.0f, "%.0f%%"))
+            if (ImGui::SliderFloat("忽略明亮高光", &protection, 0.0f, 100.0f, "%.0f%%"))
                 config->DlssNrAutoExposureShadowProtection = std::clamp(protection, 0.0f, 100.0f);
 
-            HelpMarker("Stops the sky, lamps and reflections from darkening the rest of the picture."
-                       "\n0% averages the whole frame as it is; 100% counts bright areas the least."
-                       "\nBlack bars and black borders are always left out.");
+            HelpMarker("防止天空、灯光和反射使画面其余部分变暗。\n" "0% 表示按原样对整帧取平均；100% 表示最不把明亮区域计入。\n" "黑边和黑色边框始终被排除。");
         }
         else
         {
@@ -938,28 +901,28 @@ void RenderMenu(Config* config, float menuResScale)
             // of anything that can be bounded here. One tester was still improving at 100.
             float wpScale = config->DlssNrWhitePointScale.value_or_default();
 
-            if (ImGui::SliderFloat("Paper white", &wpScale, 0.25f, 2000.0f, "%.2fx",
+            if (ImGui::SliderFloat("纸白", &wpScale, 0.25f, 2000.0f, "%.2fx",
                                    ImGuiSliderFlags_Logarithmic))
                 config->DlssNrWhitePointScale = wpScale;
 
             ImGui::SameLine();
-            if (ImGui::SmallButton("Reset##paperwhite"))
+            if (ImGui::SmallButton("重置##paperwhite"))
                 config->DlssNrWhitePointScale = 1.0f;
 
-        HelpMarker("Brightness reference used to prepare HDR colour for NR. Higher values darken the model input; lower values brighten it.\nAdjust if NR loses detail or produces colour shifts.");
+        HelpMarker("用于为 NR 准备 HDR 色彩的亮度参考。数值越高，模型输入越暗；越低越亮。\n若 NR 丢失细节或产生偏色，请调整此项。");
         }
 
         // Highlight guard, directly under the white point / trim -- it bounds the model's edit and
         // belongs with the exposure controls it works alongside.
         float maxRatio = config->DlssNrMaxRatio.value_or_default();
-        if (ImGui::SliderFloat("Highlight guard", &maxRatio, 1.0f, MaxHighlightGuard, "%.1fx"))
+        if (ImGui::SliderFloat("高光保护", &maxRatio, 1.0f, MaxHighlightGuard, "%.1fx"))
             config->DlssNrMaxRatio = maxRatio;
 
         ImGui::SameLine();
-        if (ImGui::SmallButton("Reset##guard"))
+        if (ImGui::SmallButton("重置##guard"))
             config->DlssNrMaxRatio = 2.0f;
 
-        HelpMarker("Limit how much NR can brighten a pixel; darkening is not capped. Lower values restrict highlight changes; higher values allow more.\nReplace mode still bounds darkening too -- a different guard, for a different reason.");
+        HelpMarker("限制 NR 最多能把像素提亮多少；变暗不受此限制。数值越低，高光变化越受限；越高则允许越多。\n替换模式同样会限制变暗——这是另一道出于不同原因的防线。");
 
         // Directly under the white point, because that is the number it moves and the number the
         // anchor captures. It used to sit under Inspect, a whole section away from the slider it
@@ -990,10 +953,10 @@ void RenderMenu(Config* config, float menuResScale)
                 bool meter = config->DlssNrScanMeter.value_or_default();
 
                 if (config->DlssNrWhitePointSource.value_or_default() == 2 &&
-                    ImGui::Checkbox("Show exposure meter", &meter))
+                    ImGui::Checkbox("显示曝光计", &meter))
                     config->DlssNrScanMeter = meter;
 
-                HelpMarker("Show the scanned exposure value and a colour indicator. Display only; does not change the image.");
+                HelpMarker("显示扫描到的曝光值和一个色彩指示器。仅用于显示；不改变图像。");
 
             // Shown when the scan is actually running, whichever way it got switched on.
             if (DlssNr::ExposureScan::Scanning())
@@ -1018,7 +981,7 @@ void RenderMenu(Config* config, float menuResScale)
                 // chosen source and it currently has a value to capture.
                 ImGui::BeginDisabled(live <= 0.0f || !isSource);
 
-                if (ImGui::Button("Anchor here"))
+                if (ImGui::Button("在此锚定"))
                 {
                     // What to capture. Before the first point, the paper white above (an absolute value
                     // with the wide range a fresh game needs). After that, the EFFECTIVE white point the
@@ -1044,10 +1007,10 @@ void RenderMenu(Config* config, float menuResScale)
 
                 ImGui::EndDisabled();
 
-                HelpMarker("Save the current exposure and white point as a calibration point.\nAdjust Paper white for the first point, then Trim for additional lighting conditions. Up to 8 points.");
+                HelpMarker("将当前曝光和白点保存为一个校准点。\n第一个点调整「纸白」，后续光照条件用「微调」。最多 8 个点。");
 
                 if (!isSource)
-                    ImGui::TextDisabled("Scanned exposure is not the selected white point source.");
+                    ImGui::TextDisabled("扫描曝光不是当前选定的白点来源。");
 
                 if (!anchors.empty())
                 {
@@ -1089,9 +1052,9 @@ void RenderMenu(Config* config, float menuResScale)
 
                         const bool sel = (int) i == selectedAnchor;
                         char row[96];
-                        snprintf(row, sizeof(row), "%s scan %.4f  ->  white %.2f%s",
+                        snprintf(row, sizeof(row), "%s 扫描 %.4f  ->  白点 %.2f%s",
                                  ((int) i == active && isSource) ? ">" : "  ", anchors[i].scan,
-                                 anchors[i].white, sel ? "   [editing]" : "");
+                                 anchors[i].white, sel ? "   [编辑中]" : "");
 
                         // Click selects the row (slider edits it); click again deselects (slider
                         // returns to the live unanchored point).
@@ -1101,8 +1064,7 @@ void RenderMenu(Config* config, float menuResScale)
                         ImGui::PopID();
                     }
 
-                    ImGui::TextDisabled("Select a row to edit it; select it again"
-                                        " to deselect. > marks the active point.");
+                    ImGui::TextDisabled("选择一行进行编辑；再次选择则取消。> 标记当前活动的点。");
                 }
 
                 // The direction flag only means anything with a single point; with two or more the
@@ -1110,10 +1072,10 @@ void RenderMenu(Config* config, float menuResScale)
                 if (anchors.size() == 1)
                 {
                     bool inverted = config->DlssNrScanInverted.value_or_default();
-                    if (ImGui::Checkbox("Invert exposure tracking", &inverted))
+                    if (ImGui::Checkbox("反转曝光跟踪", &inverted))
                         config->DlssNrScanInverted = inverted;
 
-                    HelpMarker("Reverse how scanned exposure changes the white point. Only needed with one calibration point.");
+                    HelpMarker("反转扫描曝光改变白点的方式。仅在只有一个校准点时需要。");
                 }
 
                 // The scan -> white point readout is shown above the sliders now, not here.
@@ -1121,7 +1083,7 @@ void RenderMenu(Config* config, float menuResScale)
                 // Everything below is read-out rather than control: what the scan is looking at and
                 // how to tell whether it found the right thing. Folded away because the two decisions
                 // that matter -- anchor, and which way the number runs -- are above it.
-                if (ImGui::TreeNode("Advanced"))
+                if (ImGui::TreeNode("高级"))
                 {
 
                     const auto found = DlssNr::ExposureScan::Report();
@@ -1131,7 +1093,7 @@ void RenderMenu(Config* config, float menuResScale)
                     {
                         ImGui::TextDisabled("%s", why != nullptr && why[0] != 0
                                                       ? why
-                                                      : "No exposure candidates found.");
+                                                      : "未找到曝光候选。");
                     }
                     else
                     {
@@ -1141,20 +1103,20 @@ void RenderMenu(Config* config, float menuResScale)
 
                             if (c.reads == 0)
                             {
-                                ImGui::TextDisabled("%zu. %s -- not read yet", i + 1, c.shape.c_str());
+                                ImGui::TextDisabled("%zu. %s —— 尚未读取", i + 1, c.shape.c_str());
                                 continue;
                             }
 
                             // Moving is the whole signal, so it is the thing that is coloured.
                             ImGui::TextColored(c.moves ? ImVec4(0.45f, 0.8f, 0.45f, 1.0f)
                                                        : ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
-                                               "%zu. %s = %.5f  (seen %.5f..%.5f) %s", i + 1,
+                                               "%zu. %s = %.5f  （实测 %.5f..%.5f） %s", i + 1,
                                                c.shape.c_str(), c.latest, c.lowest, c.highest,
-                                               c.moves ? "MOVES" : "flat so far");
+                                               c.moves ? "移动中" : "暂时平稳");
                         }
 
-                        ImGui::TextDisabled("Move between bright and dark areas to check exposure tracking.");
-                        ImGui::TextDisabled("A value that only increases may be a counter.");
+                        ImGui::TextDisabled("在明暗区域之间移动以检查曝光跟踪。");
+                        ImGui::TextDisabled("只增不减的数值可能是个计数器。");
                     }
 
                     ImGui::TreePop();
@@ -1165,7 +1127,7 @@ void RenderMenu(Config* config, float menuResScale)
 
         }
 
-        ImGui::SeparatorText("NR Options");
+        ImGui::SeparatorText("NR 选项");
 
         bool beforeSr = config->DlssNrRunBeforeSr.value_or_default() ||
                         (finishedPicture && config->DlssNrDeferredDlss.value_or_default());
@@ -1182,13 +1144,13 @@ void RenderMenu(Config* config, float menuResScale)
         // radios with these labels ran off the visible edge with no way to reach the third one.
         // Every other 3+-option control in this file (Model precision right below, Upscale Mode,
         // Upscale Method, Final Image Composition) is already a Combo for the same reason.
-        static const char* placementNames[] = { "After Super Resolution", "Before Super Resolution",
-                                                 "Finished Picture" };
+        static const char* placementNames[] = { "超分辨率之后", "超分辨率之前",
+                                                 "成品画面" };
         int placement = finishedPicture ? 2 : (beforeSr ? 1 : 0);
 
         if (deferredActive)
             ImGui::BeginDisabled();
-        if (ImGui::Combo("NR Pass at:", &placement, placementNames, IM_ARRAYSIZE(placementNames)))
+        if (ImGui::Combo("NR 遍位于:", &placement, placementNames, IM_ARRAYSIZE(placementNames)))
         {
             if (placement == 0)
             {
@@ -1219,13 +1181,13 @@ void RenderMenu(Config* config, float menuResScale)
         if (deferredActive)
             ImGui::EndDisabled();
 
-        HelpMarker("Choose where in the pipeline NR runs.\nAfter Super Resolution (default): apply NR once SR has upscaled the frame.\nBefore Super Resolution: apply NR to the smaller pre-upscale image instead. No effect when the game's Ray Reconstruction is active -- RR always runs NR after RR+SR, and unsupported input layouts fall back to after SR.\nFinished Picture: apply NR after the game has finished its lighting and effects, which may help with green noise. Works with frame generation on or off in native DirectX 12 games (SDR, HDR10, scRGB), and can also change the HUD and menus.");
+        HelpMarker("选择 NR 在管线中的运行位置。\n超分辨率之后（默认）：待 SR 完成画面放大后再应用 NR。\n超分辨率之前：改为对放大前的较小图像应用 NR。当游戏的光线重建处于活动状态时无效——RR 总是在 RR+SR 之后运行 NR，不受支持的输入布局也会回退到超分之后。\n成品画面：在游戏完成光照与特效之后应用 NR，可能有助于改善绿色噪点。在原生 DirectX 12 游戏中无论帧生成开关都可用（SDR、HDR10、scRGB），也可能改变 HUD 和菜单。");
 
         if (finishedPicture && enabled)
         {
             const auto feature = State::Instance().currentFeature;
             if (feature && (feature->Api() != API::DX12 || feature->IsWithDx12()))
-                ImGui::TextWrapped("This option needs a native DirectX 12 game.");
+                ImGui::TextWrapped("此选项需要原生 DirectX 12 游戏。");
             else
                 ImGui::TextWrapped("%s", DlssNr::FinishedPictureStatus().c_str());
         }
@@ -1235,42 +1197,38 @@ void RenderMenu(Config* config, float menuResScale)
         // placement -- progressive disclosure, same as every other mode-gated control in this file.
         if (finishedPicture)
         {
-            if (ImGui::Checkbox("Run the model before Super Resolution", &beforeSr))
+            if (ImGui::Checkbox("在超分辨率之前运行模型", &beforeSr))
             {
                 config->DlssNrRunBeforeSr = beforeSr;
                 config->DlssNrDeferredDlss = false;
             }
-            HelpMarker("Run the model at the smaller input size, upscale its changes with DLSS, then apply them to the finished picture.\nExperimental: the colour transfer is approximate and may look different. Requires DLSS SR; does not support RR.");
+            HelpMarker("以较小的输入尺寸运行模型，用 DLSS 放大其变化量，再应用到成品画面。\n实验性：色彩传递是近似的，观感可能不同。需要 DLSS SR；不支持 RR。");
         }
 
         bool deferredDlss = config->DlssNrDeferredDlss.value_or_default();
         int precisionChoice = config->DlssNrPrecision.value_or_default() == 4 ? 1 : 0;
-        const char* precisions[] = { "NVIDIA (FP8)", "Experimental (FP8+NVFP4 hybrid)" };
-        if (ImGui::Combo("Model precision", &precisionChoice, precisions, IM_ARRAYSIZE(precisions)))
+        const char* precisions[] = { "NVIDIA（FP8）", "实验性（FP8+NVFP4 混合）" };
+        if (ImGui::Combo("模型精度", &precisionChoice, precisions, IM_ARRAYSIZE(precisions)))
             config->DlssNrPrecision = precisionChoice == 1 ? 4u : 0u;
-        HelpMarker("NVIDIA: original FP8 model (default), with some sensitive operations kept at higher precision.\nExperimental: this fork's FP8+NVFP4 hybrid for RTX 50 GPUs; output may differ slightly.");
+        HelpMarker("NVIDIA：原始 FP8 模型（默认），部分敏感运算保持更高精度。\n实验性：此分支面向 RTX 50 显卡的 FP8+NVFP4 混合方案；输出可能略有差异。");
         // One setting per kernel set: the fp8 kernels (NVIDIA's DLL and fp8-based builds) and the plain FP16 kernels (used by some modified DLSS-NR DLLs).
         // Only the one for the kernels actually running is used.
         const char* kernelSet = DlssNrNative::VitKernelSet();
         bool vitReuse = config->DlssNrVitEvery.value_or_default() > 1;
-        if (ImGui::Checkbox("Reuse bottleneck: FP8 kernels", &vitReuse))
+        if (ImGui::Checkbox("复用瓶颈: FP8 内核", &vitReuse))
             config->DlssNrVitEvery = vitReuse ? 2u : 1u;
-        HelpMarker("Recomputes the model's coarsest stage (its 32x18 bottleneck) only every other frame and reuses the last result in between, "
-                   "which saves roughly a tenth of the model's GPU time.\nThat stage changes slowly, so the picture usually barely differs, "
-                   "but fast camera motion can look slightly softer. Scene cuts always recompute. With several passes, all passes compute on the same frame "
-                   "and all reuse on the next.\nOn by default. Applies immediately, NVIDIA's own model only.\n"
-                   "Used when the model runs NVIDIA's FP8 kernels (NVIDIA's DLL and FP8-based builds).");
+        HelpMarker("每隔一帧才重新计算模型最粗的层级（其 32x18 瓶颈），中间复用上一次的结果，\n" "大约可节省模型 GPU 耗时的十分之一。\n" "该层级变化缓慢，因此画面通常几乎没有差别，但快速镜头移动时可能略显柔和。场景切换时始终重新计算。多遍时，所有遍都在同一帧上计算，并在下一帧统一复用。\n" "默认开启。立即生效，仅适用于 NVIDIA 自家模型。\n" "当模型运行 NVIDIA 的 FP8 内核（NVIDIA 的 DLL 及基于 FP8 的构建）时使用。");
         bool vitReusePlain = config->DlssNrVitEveryPlain.value_or_default() > 1;
-        if (ImGui::Checkbox("Reuse bottleneck: plain FP16 kernels", &vitReusePlain))
+        if (ImGui::Checkbox("复用瓶颈: 纯 FP16 内核", &vitReusePlain))
             config->DlssNrVitEveryPlain = vitReusePlain ? 2u : 1u;
-        HelpMarker("The same as above, used when the model runs the plain FP16 kernels (used by some modified DLSS-NR DLLs).\nOn by default.");
-        ImGui::Text("Kernel set in use: %s", kernelSet);
+        HelpMarker("与上述相同，用于模型运行纯 FP16 内核时（某些修改版 DLSS-NR DLL 使用）。\n默认开启。");
+        ImGui::Text("正在使用的内核集: %s", kernelSet);
         if (DlssNrNative::VitPlainKernels() ? vitReusePlain : vitReuse)
-            ImGui::TextUnformatted(("Bottleneck reuse: " + DlssNrNative::VitStatus()).c_str());
+            ImGui::TextUnformatted(("瓶颈复用: " + DlssNrNative::VitStatus()).c_str());
         if (precisionChoice > 0)
         {
-            ImGui::TextUnformatted(enabled && DlssNrNative::IsActive() ? "Hybrid: active" : "Hybrid: inactive");
-            ImGui::TextWrapped("Loading may pause the game and look like a freeze. Please wait.");
+            ImGui::TextUnformatted(enabled && DlssNrNative::IsActive() ? "混合: 活动" : "混合: 不活动");
+            ImGui::TextWrapped("加载可能使游戏暂停，看起来像卡死。请稍候。");
         }
         // Keep failure details in the log without displaying changing kernel counters in the menu.
         auto hybridStatus = DlssNrNative::Status();
@@ -1286,48 +1244,47 @@ void RenderMenu(Config* config, float menuResScale)
             lastHybridWarning.clear();
         if (!finishedPicture)
         {
-            if (ImGui::Checkbox("Generate before SR, apply after SR (DLSS)", &deferredDlss))
+            if (ImGui::Checkbox("超分前生成，超分后应用 (DLSS)", &deferredDlss))
                 config->DlssNrDeferredDlss = deferredDlss;
-            HelpMarker("Compute NR at input resolution, upscale its changes with DLSS, then apply them after SR.\nExperimental: may flicker and adds GPU cost. Requires DLSS on DX12 or its bridges; does not support RR.\nOverrides Apply before SR. Disable Hold frame, Compare and Debug view.");
+            HelpMarker("以输入分辨率计算 NR，用 DLSS 放大其变化量，再在 SR 之后应用。\n实验性：可能闪烁并增加 GPU 开销。需要 DX12 上的 DLSS 或其桥接；不支持 RR。\n会覆盖「超分前应用」。请禁用「保持帧」「对比」和「调试视图」。");
             if (deferredDlss && rayReconstruction)
-                ImGui::TextWrapped("Generate before / apply after is unavailable with RR. Apply before SR "
-                                   "controls NR placement.");
+                ImGui::TextWrapped("使用 RR 时无法「超分前生成 / 超分后应用」。NR 的位置由「超分前应用」控制。");
             else if (deferredDlss)
-                ImGui::TextWrapped("Residual DLSS: %s", DlssNr::DeferredDlssStatus().c_str());
+                ImGui::TextWrapped("残差 DLSS: %s", DlssNr::DeferredDlssStatus().c_str());
             ImGui::BeginDisabled(finishedPicture || !deferredDlss || rayReconstruction);
             bool residualFg = config->DlssNrResidualFg.value_or_default();
-            if (ImGui::Checkbox("NR every second frame (NVIDIA Frame Generation, experimental)", &residualFg))
+            if (ImGui::Checkbox("每隔一帧运行 NR（NVIDIA 帧生成，实验性）", &residualFg))
                 config->DlssNrResidualFg = residualFg;
-            HelpMarker("Run NR every other rendered frame and use NVIDIA Frame Generation (FG) to interpolate its changes.\nRequires the option above. Adds one rendered frame of latency and may misalign effects or UI.\nIf motion vectors are unavailable, each NR result is reused for two frames.");
+            HelpMarker("每隔一个渲染帧运行 NR，并使用 NVIDIA 帧生成 (FG) 插值其变化。\n需要上面的选项。会引入一个渲染帧的延迟，并可能使特效或 UI 错位。\n若运动矢量不可用，每个 NR 结果会被复用于两帧。");
             bool approxCamera = config->DlssNrResidualFgApproxCamera.value_or_default();
-            if (ImGui::Checkbox("Allow approximate FG camera guides (experimental)", &approxCamera))
+            if (ImGui::Checkbox("允许近似的 FG 相机引导（实验性）", &approxCamera))
                 config->DlssNrResidualFgApproxCamera = approxCamera;
-            HelpMarker("Use estimated camera data when the game does not provide it. May cause artifacts during camera movement.");
+            HelpMarker("当游戏未提供相机数据时使用估算值。相机移动时可能产生伪影。");
             ImGui::EndDisabled();
 
         }
         else if (beforeSr)
-            ImGui::TextWrapped("Pre-SR changes: %s", DlssNr::DeferredDlssStatus().c_str());
+            ImGui::TextWrapped("超分前更改: %s", DlssNr::DeferredDlssStatus().c_str());
 
         // The toggle can be bound to a key, and nobody would think to look for it under Keybinds
         // unless told. Dimmed, because it is a note rather than a setting.
-        ImGui::TextDisabled("Set the NR toggle shortcut under Keybinds.");
+        ImGui::TextDisabled("在「按键绑定」中设置 NR 切换快捷键。");
 
         bool applyModel = config->DlssNrApplyModel.value_or_default();
-        if (ImGui::Checkbox("Apply the model", &applyModel))
+        if (ImGui::Checkbox("应用模型效果", &applyModel))
             config->DlssNrApplyModel = applyModel;
 
-        HelpMarker("Show or hide the NR effect. The model still runs when hidden.\nDisable Enable Neural Rendering to stop its GPU cost.");
+        HelpMarker("显示或隐藏 NR 效果。隐藏时模型仍会运行。\n要停止其 GPU 开销，请禁用「启用神经渲染」。");
 
-        if (ImGui::Checkbox("Lift model pass limit (up to 30; expensive)", &unlockPasses))
+        if (ImGui::Checkbox("解除模型遍数上限（最高 30；开销很大）", &unlockPasses))
             config->DlssNrUnlockPasses = unlockPasses;
-        HelpMarker("Allow up to 30 passes instead of 3. More passes use more GPU time and VRAM; high values may crash the game.");
+        HelpMarker("允许最多 30 遍而非 3 遍。遍数越多，占用的 GPU 时间和显存越多；数值过高可能导致游戏崩溃。");
 
         ImGui::Spacing();
         ImGui::PushItemWidth(220.0f * menuResScale);
 
-        ImGui::SeparatorText("NR Input Options");
-        ImGui::Text("Size");
+        ImGui::SeparatorText("NR 输入选项");
+        ImGui::Text("尺寸");
 
         // Any percentage, rather than a handful of steps somebody chose in advance. The lower bound
         // is 25%: below that the model is working on so little of the picture that its answer no
@@ -1348,7 +1305,7 @@ void RenderMenu(Config* config, float menuResScale)
                                : (int) lroundf(config->DlssNrWorkingScale.value_or_default() * 100.0f);
 
         ImGui::BeginDisabled(autoActive);
-        if (ImGui::SliderInt("Model resolution", &scalePercent, 25, 200, "%d%%"))
+        if (ImGui::SliderInt("模型分辨率", &scalePercent, 25, 200, "%d%%"))
             pendingScale = scalePercent;
 
         // Captured right here, before the Reset button below becomes the new "last item" --
@@ -1358,7 +1315,7 @@ void RenderMenu(Config* config, float menuResScale)
         const bool sliderReleased = ImGui::IsItemDeactivatedAfterEdit();
 
         ImGui::SameLine();
-        if (ImGui::SmallButton("Reset##modelresolution"))
+        if (ImGui::SmallButton("重置##modelresolution"))
         {
             config->DlssNrWorkingScale = 1.0f;
             pendingScale = -1;
@@ -1371,7 +1328,7 @@ void RenderMenu(Config* config, float menuResScale)
             pendingScale = -1;
         }
 
-        HelpMarker("NR resolution relative to the image it processes. 50% halves width and height; 100% uses the full size.\nLower values reduce cost and fine detail. Above 100% increases cost. Game output resolution is unchanged.\nThe model averages its input 2x2 before its main network runs, so that network always works at half of this size: cost follows the halved size, and so does the finest detail it can add.");
+        HelpMarker("NR 分辨率相对于它所处理的图像。50% 表示宽高各减半；100% 表示使用完整尺寸。\n数值越低，开销和精细细节都越少。高于 100% 会增加开销。游戏输出分辨率不变。\n模型在主干网络运行前会对输入做 2x2 平均，因此该网络始终在此尺寸的一半上工作：\n开销随减半后的尺寸变化，它能添加的最精细细节也一样。");
 
         {
             unsigned int modelWidth = 0;
@@ -1379,19 +1336,19 @@ void RenderMenu(Config* config, float menuResScale)
             DlssNr::CurrentModelSize(modelWidth, modelHeight);
 
             if (modelWidth != 0 && modelHeight != 0)
-                ImGui::TextDisabled("Model input %ux%u; its main network runs at %ux%u.", modelWidth, modelHeight,
+                ImGui::TextDisabled("模型输入 %ux%u；其主网络以 %ux%u 运行。", modelWidth, modelHeight,
                                     (modelWidth + 1) / 2, (modelHeight + 1) / 2);
         }
 
-        if (ImGui::Checkbox("Auto (post-SR only)", &resolutionAuto))
+        if (ImGui::Checkbox("自动（仅超分后）", &resolutionAuto))
             config->DlssNrModelResolutionAuto = resolutionAuto;
-        HelpMarker("When NR runs after SR -- Apply before SR off, or Ray Reconstruction, which always runs it after -- derive the working scale from the render:output ratio the upscaler itself already reconstructed detail at, instead of the slider above.\nThat output already reconstructed detail at that ratio, so NR running at the same reduced scale costs nothing extra to tune for. No effect while NR runs before SR -- the slider applies as usual.");
+        HelpMarker("当 NR 在 SR 之后运行时——「超分前应用」关闭，或使用光线重建（RR 总是在其后运行 NR）——从超分器自身已用于重建细节的渲染:输出比例推得工作缩放，\n而不是使用上面的滑块。该输出已按此比例重建了细节，因此 NR 以同样的缩减比例运行无需额外调校。\n当 NR 在 SR 之前运行时无效——此时滑块照常生效。");
 
         if (autoActive)
-            ImGui::TextDisabled("NR scale: %.2fx, derived from the upscaler's render:output ratio.",
+            ImGui::TextDisabled("NR 缩放: %.2fx，由超分器自身的渲染:输出比例推得。",
                                 scalePercent / 100.0f);
         else if (scalePercent > 100)
-            ImGui::TextDisabled("NR scale: %.2fx. Higher resolution increases GPU cost.",
+            ImGui::TextDisabled("NR 缩放: %.2fx。分辨率越高，GPU 开销越大。",
                                 scalePercent / 100.0f);
 
         if (scalePercent > 100)
@@ -1402,13 +1359,13 @@ void RenderMenu(Config* config, float menuResScale)
             if (ds < 0 || ds >= IM_ARRAYSIZE(dsNames))
                 ds = (int) Scaler::Lanczos3;
 
-            if (ImGui::Combo("Downscaler (NR)", &ds, dsNames, IM_ARRAYSIZE(dsNames)))
+            if (ImGui::Combo("降采样器 (NR)", &ds, dsNames, IM_ARRAYSIZE(dsNames)))
                 config->DlssNrScalingDownscaler = (Scaler) ds;
 
-            HelpMarker("Filter used to reduce NR output when Model resolution exceeds 100%.\nSharper filters may introduce ringing around edges.");
+            HelpMarker("当「模型分辨率」超过 100% 时用于缩减 NR 输出的滤镜。\n更锐利的滤镜可能在边缘产生振铃。");
         }
 
-        ImGui::SeparatorText("NR Output Options");
+        ImGui::SeparatorText("NR 输出选项");
 
         // Meaningful only when the model runs BELOW the frame's size. At 100% -- and above, where
         // supersampling composites its down-legged answer at native -- the residual collapses to the
@@ -1419,134 +1376,134 @@ void RenderMenu(Config* config, float menuResScale)
             if (!reduced)
                 ImGui::BeginDisabled();
 
-            static const char* enlargeNames[] = { "Classic", "Matched residual", "NVIDIA residual" };
+            static const char* enlargeNames[] = { "经典", "匹配残差", "NVIDIA 残差" };
             int enlarge = (int) std::min(config->DlssNrTransfer.value_or_default(), 2u);
 
-            if (ImGui::Combo("Upscale Mode", &enlarge, enlargeNames, IM_ARRAYSIZE(enlargeNames)))
+            if (ImGui::Combo("放大模式", &enlarge, enlargeNames, IM_ARRAYSIZE(enlargeNames)))
                 config->DlssNrTransfer = (uint32_t) enlarge;
 
             if (!reduced)
                 ImGui::EndDisabled();
 
-            HelpMarker("Below 100% model resolution: Classic enlarges the model output; Matched residual enlarges only its changes.\nMatched residual can reduce blur and colour shifts. NVIDIA residual enlarges the changes in OkLab (luminance as a ratio, chroma as a difference).\nNo effect at 100% or above.");
+            HelpMarker("模型分辨率低于 100% 时：经典方式放大模型输出；匹配残差只放大其变化量。\n匹配残差可减轻模糊和偏色。NVIDIA 残差在 OkLab 空间放大变化（亮度按比例，色度按差值）。\n在 100% 及以上无效。");
 
             if (!reduced)
                 ImGui::BeginDisabled();
 
-            static const char* upscaleMethodNames[] = { "Bilinear (fast)", "SGSR1" };
+            static const char* upscaleMethodNames[] = { "双线性（快速）", "SGSR1" };
             int upscaleMethod = (int) std::min(config->DlssNrReducedUpscaleMethod.value_or_default(), 1u);
 
-            if (ImGui::Combo("Upscale Method", &upscaleMethod, upscaleMethodNames, IM_ARRAYSIZE(upscaleMethodNames)))
+            if (ImGui::Combo("放大方式", &upscaleMethod, upscaleMethodNames, IM_ARRAYSIZE(upscaleMethodNames)))
                 config->DlssNrReducedUpscaleMethod = (uint32_t) upscaleMethod;
 
             if (!reduced)
                 ImGui::EndDisabled();
 
-            HelpMarker("Below 100% model resolution: filter used to enlarge the model's answer back to native before it's applied.\nBilinear is the cheapest, softest, pre-SGSR1 default. SGSR1 does an edge-directed upscale of the answer instead. No effect at 100% or above.");
+            HelpMarker("模型分辨率低于 100% 时：在应用前把模型结果放大回原生分辨率所用的滤镜。\n双线性是最便宜、最柔和的 SGSR1 之前默认值。SGSR1 则对结果做边缘导向放大。在 100% 及以上无效。");
         }
 
         // Experimental. 0 off (soft knee), 1 Reversible curve + our composition, 2 Reversible curve +
         // pure-inverse replace, 3 Balanced+composed, 4 Balanced+replace (identity midtones + unclipped
         // highlights). Always shown.
-        static const char* reversibleNames[] = { "Off (soft knee)", "Reversible curve + composed",
-                                                 "Reversible curve + replace", "Balanced curve + composed",
-                                                 "Balanced curve + replace" };
+        static const char* reversibleNames[] = { "关闭（软拐点）", "可逆曲线 + 合成",
+                                                 "可逆曲线 + 替换", "均衡曲线 + 合成",
+                                                 "均衡曲线 + 替换" };
         int reversible = (int) config->DlssNrReversibleMode.value_or_default();
         if (reversible < 0 || reversible > 4)
             reversible = 0;
-        if (ImGui::Combo("Final Image Composition (experimental)", &reversible, reversibleNames,
+        if (ImGui::Combo("最终图像合成（实验性）", &reversible, reversibleNames,
                          IM_ARRAYSIZE(reversibleNames)))
             config->DlssNrReversibleMode = (uint32_t) reversible;
 
-        HelpMarker("Choose how HDR brightness is mapped for NR.\nSoft knee compresses highlights. Reversible curve uses a reversible mapping. Balanced preserves midtones and compresses highlights.\nComposed uses the strength control and the Highlight guard below (brightening only; darkening is not capped in Composed). Replace bypasses the strength control (the model's answer applies directly, uncomposited) but the same Highlight guard number still bounds it in both directions -- lower it if Replace flickers or shows banding near bright highlights.");
+        HelpMarker("选择 NR 的 HDR 亮度映射方式。\n软拐点会压缩高光。可逆曲线使用可逆映射。均衡模式保留中间调并压缩高光。\n合成模式使用强度控制和下方的「高光保护」（仅限制提亮；合成模式下变暗不受限）。替换模式绕过强度控制（模型结果直接应用，不做合成），但同一个「高光保护」数值仍会在两个方向上限制它——若替换模式在明亮高光附近闪烁或出现色带，请调低该值。");
 
         if (reversible == 2 || reversible == 4)
         {
             float replaceDetail = config->DlssNrReplaceDetailStrength.value_or_default();
-            if (ImGui::SliderFloat("Restore Sharpness", &replaceDetail, 0.0f, 2.0f, "%.2f"))
+            if (ImGui::SliderFloat("恢复锐度", &replaceDetail, 0.0f, 2.0f, "%.2f"))
                 config->DlssNrReplaceDetailStrength = replaceDetail;
 
             ImGui::SameLine();
-            if (ImGui::SmallButton("Reset##replacedetail"))
+            if (ImGui::SmallButton("重置##replacedetail"))
                 config->DlssNrReplaceDetailStrength = 0.5f;
 
-            HelpMarker("Sharpens fine edges and textures using brightness from the original frame. Helps when Final Image Composition uses a Replace mode and NR runs below 100% resolution, where the image can otherwise look soft.\nNo effect at 100% resolution or above, or when set to 0.");
+            HelpMarker("使用原始帧的亮度锐化细边缘与纹理。当「最终图像合成」使用替换模式、且 NR 以低于 100% 的分辨率运行时很有帮助，否则画面可能显得发软。\n分辨率为 100% 或更高时无效，设为 0 时也无效。");
         }
 
-        ImGui::SeparatorText("Effect strength");
+        ImGui::SeparatorText("效果强度");
 
         float transfer = config->DlssNrTransferStrength.value_or_default();
-        if (ImGui::SliderFloat("Detail strength", &transfer, 0.0f, 2.0f, "%.2f"))
+        if (ImGui::SliderFloat("细节强度", &transfer, 0.0f, 2.0f, "%.2f"))
             config->DlssNrTransferStrength = transfer;
 
         ImGui::SameLine();
-        if (ImGui::SmallButton("Reset##detail"))
+        if (ImGui::SmallButton("重置##detail"))
             config->DlssNrTransferStrength = 1.0f;
 
-        HelpMarker("Overall NR detail strength: 0 = no effect, 1 = normal, above 1 = exaggerated.");
+        HelpMarker("NR 总体细节强度: 0 = 无效果，1 = 正常，大于 1 = 夸张。");
 
         float colour = config->DlssNrColourStrength.value_or_default();
-        if (ImGui::SliderFloat("Colour strength", &colour, 0.0f, 4.0f, "%.2f"))
+        if (ImGui::SliderFloat("色彩强度", &colour, 0.0f, 4.0f, "%.2f"))
             config->DlssNrColourStrength = colour;
 
         ImGui::SameLine();
-        if (ImGui::SmallButton("Reset##colour"))
+        if (ImGui::SmallButton("重置##colour"))
             config->DlssNrColourStrength = 1.0f;
 
-        HelpMarker("NR colour strength: 0 = preserve game colours, 1 = model colours, above 1 = stronger saturation.");
+        HelpMarker("NR 色彩强度: 0 = 保留游戏色彩，1 = 模型色彩，大于 1 = 更强饱和度。");
 
-        ImGui::SeparatorText("Model passes");
-        ImGui::TextWrapped("Settings apply when you release a slider.");
-        static const char* styles[] = { "Standard", "Natural", "Cinematic" };
-        static const char* inheritedStyles[] = { "Auto (inherit pass 1)", "Standard", "Natural", "Cinematic" };
+        ImGui::SeparatorText("模型遍数");
+        ImGui::TextWrapped("松开滑块时设置才会生效。");
+        static const char* styles[] = { "标准", "自然", "电影感" };
+        static const char* inheritedStyles[] = { "自动（继承第 1 遍）", "标准", "自然", "电影感" };
 
-        if (ImGui::TreeNodeEx("Pass 1", ImGuiTreeNodeFlags_DefaultOpen))
+        if (ImGui::TreeNodeEx("第 1 遍", ImGuiTreeNodeFlags_DefaultOpen))
         {
             int style = (int) std::min(config->DlssNrStyle.value_or_default(), 2u);
-            if (ImGui::Combo("Style", &style, styles, IM_ARRAYSIZE(styles)))
+            if (ImGui::Combo("风格", &style, styles, IM_ARRAYSIZE(styles)))
                 config->DlssNrStyle = (uint32_t) style;
-            HelpMarker("Select the appearance profile: Standard, Natural or Cinematic. Intensity controls its strength.");
-            DeferredSlider("Intensity", &config->DlssNrIntensity, 0.0f, 2.0f, 1.0f);
-            DeferredSlider("Local structure", &config->DlssNrLocalStructure, 0.0f, 2.0f, 1.0f);
-            DeferredSlider("Local tone", &config->DlssNrLocalTone, 0.0f, 2.0f, 1.0f);
-            DeferredSlider("Skin structure", &config->DlssNrSkinStructure, -1.0f, 2.0f, -1.0f);
+            HelpMarker("选择外观配置档: 标准、自然或电影感。强度控制其作用力度。");
+            DeferredSlider("强度", &config->DlssNrIntensity, 0.0f, 2.0f, 1.0f);
+            DeferredSlider("局部结构", &config->DlssNrLocalStructure, 0.0f, 2.0f, 1.0f);
+            DeferredSlider("局部色调", &config->DlssNrLocalTone, 0.0f, 2.0f, 1.0f);
+            DeferredSlider("皮肤结构", &config->DlssNrSkinStructure, -1.0f, 2.0f, -1.0f);
             bool mask = config->DlssNrAutoMask.value_or_default();
-            if (ImGui::Checkbox("Auto skin mask", &mask))
+            if (ImGui::Checkbox("自动皮肤遮罩", &mask))
                 config->DlssNrAutoMask = mask;
-            HelpMarker("Use the model's learned skin selection to apply Skin structure without an authored mask.\nAccuracy varies. This is separate from the colour-based mask below.");
+            HelpMarker("使用模型学习到的皮肤选择来应用「皮肤结构」，无需手工遮罩。\n准确度不一。这与下方基于色彩的遮罩是分开的。");
             ImGui::TreePop();
         }
 
-        if (ImGui::TreeNodeEx("Pass 2", ImGuiTreeNodeFlags_DefaultOpen))
+        if (ImGui::TreeNodeEx("第 2 遍", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            ImGui::TextWrapped("Defaults: inherit Pass 1; Local tone = 0. Reset restores these defaults.");
-            InheritedProfileCombo("Style", &config->DlssNrPass2Style, inheritedStyles, IM_ARRAYSIZE(inheritedStyles));
-            DeferredSlider("Intensity", &config->DlssNrPass2Intensity, 0.0f, 2.0f, config->DlssNrIntensity.value_or_default(), "%.2f", true);
-            DeferredSlider("Local structure", &config->DlssNrPass2LocalStructure, 0.0f, 2.0f, config->DlssNrLocalStructure.value_or_default(), "%.2f", true);
-            DeferredSlider("Local tone", &config->DlssNrPass2LocalTone, 0.0f, 2.0f, 0.0f, "%.2f", true);
-            DeferredSlider("Skin structure", &config->DlssNrPass2SkinStructure, -1.0f, 2.0f, config->DlssNrSkinStructure.value_or_default(), "%.2f", true);
+            ImGui::TextWrapped("默认值：继承第 1 遍；局部色调 = 0。重置可恢复这些默认值。");
+            InheritedProfileCombo("风格", &config->DlssNrPass2Style, inheritedStyles, IM_ARRAYSIZE(inheritedStyles));
+            DeferredSlider("强度", &config->DlssNrPass2Intensity, 0.0f, 2.0f, config->DlssNrIntensity.value_or_default(), "%.2f", true);
+            DeferredSlider("局部结构", &config->DlssNrPass2LocalStructure, 0.0f, 2.0f, config->DlssNrLocalStructure.value_or_default(), "%.2f", true);
+            DeferredSlider("局部色调", &config->DlssNrPass2LocalTone, 0.0f, 2.0f, 0.0f, "%.2f", true);
+            DeferredSlider("皮肤结构", &config->DlssNrPass2SkinStructure, -1.0f, 2.0f, config->DlssNrSkinStructure.value_or_default(), "%.2f", true);
             bool mask = config->DlssNrPass2AutoMask.has_value() ? config->DlssNrPass2AutoMask.value() : config->DlssNrAutoMask.value_or_default();
-            if (ImGui::Checkbox("Auto skin mask", &mask))
+            if (ImGui::Checkbox("自动皮肤遮罩", &mask))
                 config->DlssNrPass2AutoMask = mask;
             ImGui::SameLine();
-            if (ImGui::SmallButton("Reset##mask"))
+            if (ImGui::SmallButton("重置##mask"))
                 config->DlssNrPass2AutoMask = std::optional<bool> {};
             ImGui::TreePop();
         }
 
-        if (ImGui::TreeNodeEx("Pass 3", ImGuiTreeNodeFlags_DefaultOpen))
+        if (ImGui::TreeNodeEx("第 3 遍", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            ImGui::TextWrapped("Defaults: inherit Pass 1; Local tone = 0. Reset restores these defaults.");
-            InheritedProfileCombo("Style", &config->DlssNrPass3Style, inheritedStyles, IM_ARRAYSIZE(inheritedStyles));
-            DeferredSlider("Intensity", &config->DlssNrPass3Intensity, 0.0f, 2.0f, config->DlssNrIntensity.value_or_default(), "%.2f", true);
-            DeferredSlider("Local structure", &config->DlssNrPass3LocalStructure, 0.0f, 2.0f, config->DlssNrLocalStructure.value_or_default(), "%.2f", true);
-            DeferredSlider("Local tone", &config->DlssNrPass3LocalTone, 0.0f, 2.0f, 0.0f, "%.2f", true);
-            DeferredSlider("Skin structure", &config->DlssNrPass3SkinStructure, -1.0f, 2.0f, config->DlssNrSkinStructure.value_or_default(), "%.2f", true);
+            ImGui::TextWrapped("默认值：继承第 1 遍；局部色调 = 0。重置可恢复这些默认值。");
+            InheritedProfileCombo("风格", &config->DlssNrPass3Style, inheritedStyles, IM_ARRAYSIZE(inheritedStyles));
+            DeferredSlider("强度", &config->DlssNrPass3Intensity, 0.0f, 2.0f, config->DlssNrIntensity.value_or_default(), "%.2f", true);
+            DeferredSlider("局部结构", &config->DlssNrPass3LocalStructure, 0.0f, 2.0f, config->DlssNrLocalStructure.value_or_default(), "%.2f", true);
+            DeferredSlider("局部色调", &config->DlssNrPass3LocalTone, 0.0f, 2.0f, 0.0f, "%.2f", true);
+            DeferredSlider("皮肤结构", &config->DlssNrPass3SkinStructure, -1.0f, 2.0f, config->DlssNrSkinStructure.value_or_default(), "%.2f", true);
             bool mask = config->DlssNrPass3AutoMask.has_value() ? config->DlssNrPass3AutoMask.value() : config->DlssNrAutoMask.value_or_default();
-            if (ImGui::Checkbox("Auto skin mask", &mask))
+            if (ImGui::Checkbox("自动皮肤遮罩", &mask))
                 config->DlssNrPass3AutoMask = mask;
             ImGui::SameLine();
-            if (ImGui::SmallButton("Reset##mask"))
+            if (ImGui::SmallButton("重置##mask"))
                 config->DlssNrPass3AutoMask = std::optional<bool> {};
             ImGui::TreePop();
         }
@@ -1555,120 +1512,120 @@ void RenderMenu(Config* config, float menuResScale)
         for (unsigned int pass = 3; pass < visiblePasses; ++pass)
         {
             auto& settings = config->DlssNrExtraPasses[pass - 3];
-            if (!ImGui::TreeNode(std::format("Pass {}", pass + 1).c_str()))
+            if (!ImGui::TreeNode(std::format("第 {} 遍", pass + 1).c_str()))
                 continue;
-            ImGui::TextWrapped("Defaults: inherit Pass 1; Local tone = 0.");
-            InheritedProfileCombo("Style", &settings.style, inheritedStyles, IM_ARRAYSIZE(inheritedStyles));
-            DeferredSlider("Intensity", &settings.intensity, 0.0f, 2.0f, config->DlssNrIntensity.value_or_default(), "%.2f", true);
-            DeferredSlider("Local structure", &settings.structure, 0.0f, 2.0f, config->DlssNrLocalStructure.value_or_default(), "%.2f", true);
-            DeferredSlider("Local tone", &settings.tone, 0.0f, 2.0f, 0.0f, "%.2f", true);
-            DeferredSlider("Skin structure", &settings.skin, -1.0f, 2.0f, config->DlssNrSkinStructure.value_or_default(), "%.2f", true);
+            ImGui::TextWrapped("默认值：继承第 1 遍；局部色调 = 0。");
+            InheritedProfileCombo("风格", &settings.style, inheritedStyles, IM_ARRAYSIZE(inheritedStyles));
+            DeferredSlider("强度", &settings.intensity, 0.0f, 2.0f, config->DlssNrIntensity.value_or_default(), "%.2f", true);
+            DeferredSlider("局部结构", &settings.structure, 0.0f, 2.0f, config->DlssNrLocalStructure.value_or_default(), "%.2f", true);
+            DeferredSlider("局部色调", &settings.tone, 0.0f, 2.0f, 0.0f, "%.2f", true);
+            DeferredSlider("皮肤结构", &settings.skin, -1.0f, 2.0f, config->DlssNrSkinStructure.value_or_default(), "%.2f", true);
             bool mask = settings.autoMask.value_or(config->DlssNrAutoMask.value_or_default());
-            if (ImGui::Checkbox("Auto skin mask", &mask))
+            if (ImGui::Checkbox("自动皮肤遮罩", &mask))
                 settings.autoMask = mask;
             ImGui::SameLine();
-            if (ImGui::SmallButton("Reset##mask"))
+            if (ImGui::SmallButton("重置##mask"))
                 settings.autoMask = std::optional<bool> {};
             ImGui::TreePop();
         }
 
-        if (ImGui::TreeNode("Advanced preset hints (effect unverified)"))
+        if (ImGui::TreeNode("高级预设提示（效果未经验证）"))
         {
-            ImGui::TextWrapped("Experimental model hints; visual effect unverified. Use Style to select a profile.");
-            static const char* presets[] = { "Default", "Preset 1", "Preset 2", "Preset 3" };
-            static const char* inheritedPresets[] = { "Auto (inherit pass 1)", "Default", "Preset 1", "Preset 2", "Preset 3" };
+            ImGui::TextWrapped("实验性模型提示；视觉效果未经验证。请使用「风格」选择配置档。");
+            static const char* presets[] = { "默认", "预设 1", "预设 2", "预设 3" };
+            static const char* inheritedPresets[] = { "自动（继承第 1 遍）", "默认", "预设 1", "预设 2", "预设 3" };
             int preset = (int) std::min(config->DlssNrPreset.value_or_default(), 3u);
-            if (ImGui::Combo("Pass 1 preset hint", &preset, presets, IM_ARRAYSIZE(presets)))
+            if (ImGui::Combo("第 1 遍预设提示", &preset, presets, IM_ARRAYSIZE(presets)))
                 config->DlssNrPreset = (uint32_t) preset;
-            InheritedProfileCombo("Pass 2 preset hint", &config->DlssNrPass2Preset, inheritedPresets, IM_ARRAYSIZE(inheritedPresets));
-            InheritedProfileCombo("Pass 3 preset hint", &config->DlssNrPass3Preset, inheritedPresets, IM_ARRAYSIZE(inheritedPresets));
+            InheritedProfileCombo("第 2 遍预设提示", &config->DlssNrPass2Preset, inheritedPresets, IM_ARRAYSIZE(inheritedPresets));
+            InheritedProfileCombo("第 3 遍预设提示", &config->DlssNrPass3Preset, inheritedPresets, IM_ARRAYSIZE(inheritedPresets));
             ImGui::TreePop();
         }
-        ImGui::TextWrapped("Pass settings apply to SR and RR on DX12 and native Vulkan. The driver-proxy backend supports one pass.");
+        ImGui::TextWrapped("遍设置适用于 DX12 和原生 Vulkan 上的 SR 与 RR。驱动代理后端仅支持一遍。");
 
-        ImGui::SeparatorText("Colour");
+        ImGui::SeparatorText("色彩");
 
-        if (ImGui::TreeNode("Skin and environment (final edit)"))
+        if (ImGui::TreeNode("皮肤与环境（最终编辑）"))
         {
-            ImGui::TextWrapped("Select skin by colour and adjust the final NR effect separately for skin and scenery. Selection can be inaccurate; check Preview.");
+            ImGui::TextWrapped("按色彩选择皮肤，并分别调整皮肤与景物的最终 NR 效果。选择可能不准确；请查看预览。");
             bool filter = config->DlssNrSkinProtection.value_or_default();
-            if (ImGui::Checkbox("Separate skin / environment controls", &filter))
+            if (ImGui::Checkbox("皮肤 / 环境分开控制", &filter))
                 config->DlssNrSkinProtection = filter;
             ImGui::BeginDisabled(!filter);
             bool tone = config->DlssNrSkinToneEnabled.value_or_default();
-            if (ImGui::Checkbox("Allow skin tone / colour changes", &tone))
+            if (ImGui::Checkbox("允许改变肤色 / 色彩", &tone))
                 config->DlssNrSkinToneEnabled = tone;
-            HelpMarker("Allow NR colour changes in the selected skin region. Turn off to preserve its colour; detail can still change.");
+            HelpMarker("允许 NR 在所选皮肤区域内改变色彩。关闭则保留原有色彩；细节仍可变化。");
             const auto slider = [](const char* label, auto& option) {
                 float v = option.value_or_default();
                 if (ImGui::SliderFloat(label, &v, 0.0f, 1.0f, "%.2f"))
                     option = v;
                 ImGui::SameLine();
-                const std::string resetId = std::string("Reset##") + label;
+                const std::string resetId = std::string("重置##") + label;
                 if (ImGui::SmallButton(resetId.c_str()))
                     option = 1.0f;
-                HelpMarker("NR strength in this region: 0 = no change, 1 = full effect.");
+                HelpMarker("该区域内的 NR 强度: 0 = 无变化，1 = 完全生效。");
             };
             slider("Skin detail / lighting", config->DlssNrSkinDetail);
             ImGui::BeginDisabled(!tone);
-            slider("Skin colour", config->DlssNrSkinColour);
+            slider("皮肤色彩", config->DlssNrSkinColour);
             ImGui::EndDisabled();
             slider("Environment detail / lighting", config->DlssNrEnvironmentDetail);
-            slider("Environment colour", config->DlssNrEnvironmentColour);
+            slider("环境色彩", config->DlssNrEnvironmentColour);
             bool preview = config->DlssNrShowSkinMask.value_or_default();
-            if (ImGui::Checkbox("Preview colour-based mask", &preview))
+            if (ImGui::Checkbox("预览基于色彩的遮罩", &preview))
                 config->DlssNrShowSkinMask = preview;
             ImGui::EndDisabled();
             ImGui::TreePop();
         }
 
-        ImGui::SeparatorText("Compare");
+        ImGui::SeparatorText("对比");
 
         // Freeze the frame the model works on, so a setting change re-renders it in place -- the only
         // clean way to A/B our own settings (a moving scene confounds every other comparison). See
         // design/frame-hold.md.
         bool held = config->DlssNrHoldFrame.value_or_default();
-        if (ImGui::Checkbox("Hold frame", &held))
+        if (ImGui::Checkbox("冻结帧", &held))
             config->DlssNrHoldFrame = held;
 
-        HelpMarker("Freeze NR's input to compare its settings. The game's HUD and later effects may keep updating.\nDoes not re-run SR/RR or show changes to their settings. Turn off to resume.");
+        HelpMarker("冻结 NR 的输入以对比其设置。游戏的 HUD 和后续特效可能仍在更新。\n不会重新运行 SR/RR，也不显示其设置的变化。关闭即可恢复。");
 
         bool frameStats = config->DlssNrFrameStats.value_or_default();
-        if (ImGui::Checkbox("Log frame brightness stats", &frameStats))
+        if (ImGui::Checkbox("记录帧亮度统计", &frameStats))
             config->DlssNrFrameStats = frameStats;
 
-        HelpMarker("Diagnostic. Every 2 seconds or so, writes a line to OptiScaler.log describing the frame NR is given: format, luminance percentiles, the game's exposure value and the white point in use.");
+        HelpMarker("诊断。约每 2 秒向 OptiScaler.log 写入一行，描述交给 NR 的帧：格式、亮度百分位、游戏的曝光值以及当前使用的白点。");
 
         bool kernelProfile = config->DlssNrKernelProfile.value_or_default();
-        if (ImGui::Checkbox("Log NR kernel profile", &kernelProfile))
+        if (ImGui::Checkbox("记录 NR 内核分析", &kernelProfile))
             config->DlssNrKernelProfile = kernelProfile;
 
-        HelpMarker("Diagnostic. Every 4 seconds or so, writes a line to OptiScaler.log with the NVIDIA kernels one NR evaluation launched (fp8-named or plain fp16) and where its GPU time went, by kernel group. Approximate: chained kernels overlap.");
+        HelpMarker("诊断。约每 4 秒向 OptiScaler.log 写入一行，记录一次 NR 求值所启动的 NVIDIA 内核（以 fp8 命名或纯 fp16）及其 GPU 耗时去向（按内核分组）。为近似值：串联内核会重叠。");
 
-        static const char* compareNames[] = { "Off", "Side by side", "Wipe" };
+        static const char* compareNames[] = { "关闭", "并排", "划擦" };
         int compare = (int) config->DlssNrCompare.value_or_default();
-        if (ImGui::Combo("Compare", &compare, compareNames, IM_ARRAYSIZE(compareNames)))
+        if (ImGui::Combo("对比", &compare, compareNames, IM_ARRAYSIZE(compareNames)))
             config->DlssNrCompare = (uint32_t) compare;
 
-        HelpMarker("Compare the original and NR result. Side by side fits both images; Wipe divides one full-size image.");
+        HelpMarker("对比原始画面与 NR 结果。并排模式同时容纳两张图像；划像模式则分割一张全尺寸图像。");
 
         if (compare != 0)
         {
             bool swap = config->DlssNrCompareSwap.value_or_default();
-            if (ImGui::Checkbox("Swap sides", &swap))
+            if (ImGui::Checkbox("交换左右", &swap))
                 config->DlssNrCompareSwap = swap;
-            HelpMarker("Swap the original and NR sides.");
+            HelpMarker("交换原始与 NR 两侧。");
 
             bool tags = config->DlssNrCompareTags.value_or_default();
-            if (ImGui::Checkbox("Label the sides", &tags))
+            if (ImGui::Checkbox("标注两侧", &tags))
                 config->DlssNrCompareTags = tags;
 
-            HelpMarker("Display labels identifying the original and NR sides.");
+            HelpMarker("显示标识原始与 NR 两侧的标签。");
 
             if (tags)
             {
                 float tagScale = config->DlssNrTagScale.value_or_default();
-                if (ImGui::SliderFloat("Label size", &tagScale, 0.5f, 5.0f, "%.1fx"))
+                if (ImGui::SliderFloat("标签大小", &tagScale, 0.5f, 5.0f, "%.1fx"))
                     config->DlssNrTagScale = std::clamp(tagScale, 0.5f, 5.0f);
             }
 
@@ -1677,28 +1634,28 @@ void RenderMenu(Config* config, float menuResScale)
         if (compare == 1)
         {
             float zoom = config->DlssNrCompareZoom.value_or_default();
-            if (ImGui::SliderFloat("Zoom", &zoom, 1.0f, 2.0f, "%.2f"))
+            if (ImGui::SliderFloat("缩放", &zoom, 1.0f, 2.0f, "%.2f"))
                 config->DlssNrCompareZoom = std::clamp(zoom, 1.0f, 2.0f);
 
-            HelpMarker("Side-by-side zoom: 1 = fit the whole image, 2 = fill each half by cropping the sides.");
+            HelpMarker("并排缩放: 1 = 容纳整幅图像，2 = 裁切两侧以填满每一半。");
         }
 
         if (compare == 2)
         {
             float split = config->DlssNrCompareSplit.value_or_default();
-            if (ImGui::SliderFloat("Split", &split, 0.0f, 1.0f, "%.2f"))
+            if (ImGui::SliderFloat("分屏", &split, 0.0f, 1.0f, "%.2f"))
                 config->DlssNrCompareSplit = std::clamp(split, 0.0f, 1.0f);
 
-            HelpMarker("Position of the comparison boundary. Swap sides reverses which image appears on each side.");
+            HelpMarker("对比分界线的位置。「交换左右」会反转每一侧显示的图像。");
         }
 
-        static const char* debugNames[] = { "Off", "Proxy (what the model sees)", "Model output (raw)",
-                                            "Difference (amplified)" };
+        static const char* debugNames[] = { "关闭", "代理（模型所见）", "模型输出（原始）",
+                                            "差异（放大）" };
         int debugView = (int) config->DlssNrDebugView.value_or_default();
         if (ImGui::Combo("Debug view", &debugView, debugNames, IM_ARRAYSIZE(debugNames)))
             config->DlssNrDebugView = (uint32_t) debugView;
 
-        HelpMarker("Show the model input, raw output, or a 20x amplified difference. Grey in Difference means no change.\nShown at the game's own brightness, so Model input brightness makes the view brighter or darker by the amount it changes what the model is given.");
+        HelpMarker("显示模型输入、原始输出，或放大 20 倍的差异图。差异图中的灰色表示无变化。\n以游戏自身的亮度显示，因此「模型输入亮度」会让视图按其改变模型输入的幅度相应变亮或变暗。");
 
         ImGui::PopItemWidth();
     }

@@ -159,6 +159,10 @@ foreach ($d in @("Licenses", "OptiScaler")) {
 
 Copy-Item $forwarder "$stage\nvngx.dll_dlssnr.dll" -Force
 Copy-Item -LiteralPath "$root\docs" -Destination "$stage\docs" -Recurse -Force
+
+# Simplified Chinese localization: the bundled CJK font. OptiScaler looks for it at
+# <game>\font\wqy-microhei.ttc (next to the DLL) when the UI is Chinese.
+Copy-Item -LiteralPath "$root\font" -Destination "$stage\font" -Recurse -Force
 New-Item -ItemType Directory -Path "$stage\redist\streamline" -Force | Out-Null
 Copy-Item -LiteralPath "$root\redist\streamline\manifest.json" -Destination "$stage\redist\streamline\manifest.json"
 

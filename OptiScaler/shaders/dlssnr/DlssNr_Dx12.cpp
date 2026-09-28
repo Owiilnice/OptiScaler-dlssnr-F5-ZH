@@ -603,7 +603,7 @@ bool EnsureForwarder()
     {
         LOG_ERROR("nvngx.dll_dlssnr.dll not found beside OptiScaler ({}) or the game executable",
                   g_dllDir.string());
-        g_nr.reason = "nvngx.dll_dlssnr.dll is missing";
+        g_nr.reason = "缺少 nvngx.dll_dlssnr.dll";
         return false;
     }
 
@@ -615,7 +615,7 @@ bool EnsureForwarder()
     {
         LOG_ERROR("nvngx.dll_dlssnr.dll found at {} but would not load, error {}", path.string(),
                   GetLastError());
-        g_nr.reason = "nvngx.dll_dlssnr.dll would not load";
+        g_nr.reason = "nvngx.dll_dlssnr.dll 无法加载";
         return false;
     }
 
@@ -639,7 +639,7 @@ bool EnsureForwarder()
 
     if (g_nr.create == nullptr || g_nr.evaluate == nullptr)
     {
-        g_nr.reason = "Update nvngx.dll_dlssnr.dll from the complete release (NR v2 exports required)";
+        g_nr.reason = "请从完整发行包更新 nvngx.dll_dlssnr.dll（需要 NR v2 导出）";
         return false;
     }
 
@@ -660,13 +660,13 @@ bool EnsureCapabilityParams(ID3D12Device* device)
 
     if (!NVNGXProxy::IsDx12Inited() && !NVNGXProxy::InitDx12(device))
     {
-        g_nr.reason = "the NGX core would not initialise";
+        g_nr.reason = "NGX 核心无法初始化";
         return false;
     }
 
     if (NVNGXProxy::D3D12_GetCapabilityParameters() == nullptr)
     {
-        g_nr.reason = "the NGX core has no capability parameters";
+        g_nr.reason = "NGX 核心没有能力参数";
         return false;
     }
 
@@ -674,7 +674,7 @@ bool EnsureCapabilityParams(ID3D12Device* device)
         g_nr.capabilityParams == nullptr)
     {
         g_nr.capabilityParams = nullptr;
-        g_nr.reason = "the NGX core refused its capability parameters";
+        g_nr.reason = "NGX 核心拒绝了其能力参数";
         return false;
     }
 
@@ -1251,13 +1251,13 @@ void ReportFrameStats(float whitePoint, uint32_t source)
     std::string autoText = "n/a";
 
     if (source == 3 && g_nr.autoExposureValue > 1e-8f)
-        autoText = std::format("{:.5g} (white point it gives: {:.4g}){}", g_nr.autoExposureValue,
+        autoText = std::format("{:.5g}（它给出的白点：{:.4g}）{}", g_nr.autoExposureValue,
                                g_nr.autoExposurePreExposure / g_nr.autoExposureValue,
                                g_nr.followingGame
-                                   ? std::format(", following the game's exposure (calibration {:+.2f} EV)",
+                                   ? std::format("，跟随游戏的曝光（校准 {:+.2f} EV）",
                                                  DlssNrFollowGame::Instance().OffsetEv())
                                : DlssNrFollowGame::Instance().Locked()
-                                   ? std::format(", not following (calibration {:+.2f} EV)",
+                                   ? std::format("，不跟随（校准 {:+.2f} EV）",
                                                  DlssNrFollowGame::Instance().OffsetEv())
                                    : std::string());
 
@@ -1353,8 +1353,8 @@ void ConsumeCalibrationReadback()
     const float suggestion = std::clamp(tiles[nth], 0.25f, 1990.0f);
 
     g_nr.calibUsable = !g_nr.calibPassthrough && litFraction > 0.20f;
-    g_nr.calibWhy = g_nr.calibPassthrough  ? "this game hands over a frame it already tone mapped, so there is nothing to normalise"
-                    : litFraction <= 0.20f ? "too little of this scene is lit to say where the top of the range is"
+    g_nr.calibWhy = g_nr.calibPassthrough  ? "此游戏交出的是已完成色调映射的帧，因此没有可归一化的内容"
+                    : litFraction <= 0.20f ? "此场景中受光部分太少，无法判断动态范围的上限"
                                            : "";
 
     g_nr.calibHistory[g_nr.calibCount % NrState::kCalibHistory] = suggestion;
@@ -2408,7 +2408,7 @@ void DlssNr_Dx12::Dispatch(ID3D12GraphicsCommandList* cmdList, ID3D12Resource* c
     if (cropColor && g_nr.activeColor == nullptr)
     {
         g_nr.failed = true;
-        g_nr.reason = "the pre-SR active colour staging texture could not be allocated";
+        g_nr.reason = "无法分配超分前使用的活动色彩暂存纹理";
         LOG_ERROR("DLSS-NR unavailable: {}", g_nr.reason);
         device->Release();
         return;
@@ -2535,7 +2535,7 @@ void DlssNr_Dx12::Dispatch(ID3D12GraphicsCommandList* cmdList, ID3D12Resource* c
         if (!snippet.has_value())
         {
             g_nr.failed = true;
-            g_nr.reason = "nvngx_dlssnr.dll was not found beside OptiScaler or the game";
+            g_nr.reason = "在 OptiScaler 或游戏旁边未找到 nvngx_dlssnr.dll";
             LOG_ERROR("DLSS-NR unavailable: {}", g_nr.reason);
             device->Release();
             return;
@@ -2558,7 +2558,7 @@ void DlssNr_Dx12::Dispatch(ID3D12GraphicsCommandList* cmdList, ID3D12Resource* c
         {
             g_nr.featurePendingSubmission = false;
             g_nr.failed = true;
-            g_nr.reason = "the model would not initialise";
+            g_nr.reason = "模型无法初始化";
             if (g_nr.lastModelError && *g_nr.lastModelError())
             {
                 g_nr.modelError = g_nr.lastModelError();
@@ -2749,7 +2749,7 @@ void DlssNr_Dx12::Dispatch(ID3D12GraphicsCommandList* cmdList, ID3D12Resource* c
     if (!haveCodec)
     {
         g_nr.failed = true;
-        g_nr.reason = "the colour codec would not compile";
+        g_nr.reason = "色彩编解码器无法编译";
         LOG_ERROR("DLSS-NR unavailable: {}", g_nr.reason);
         device->Release();
         return;
@@ -3243,7 +3243,7 @@ void DlssNr_Dx12::Dispatch(ID3D12GraphicsCommandList* cmdList, ID3D12Resource* c
     if (depthIn == nullptr || motionIn == nullptr)
     {
         g_nr.failed = true;
-        g_nr.reason = "the game's depth or motion vectors could not be made readable";
+        g_nr.reason = "游戏的深度或运动矢量无法变为可读";
         LOG_ERROR("DLSS-NR unavailable: {}", g_nr.reason);
         FinishColor(false);
         device->Release();
@@ -3276,7 +3276,7 @@ void DlssNr_Dx12::Dispatch(ID3D12GraphicsCommandList* cmdList, ID3D12Resource* c
         if (proxyResult != 1)
         {
             g_nr.failed = true;
-            g_nr.reason = "the proxy path could not run the model";
+            g_nr.reason = "代理路径无法运行模型";
             LOG_ERROR("DLSS-NR (proxy): evaluate returned 0x{:X} ({}), disabling for this session",
                       proxyResult, NgxResultName(proxyResult));
         }
@@ -3806,7 +3806,7 @@ void DlssNr_Dx12::Dispatch(ID3D12GraphicsCommandList* cmdList, ID3D12Resource* c
     else
     {
         g_nr.failed = true;
-        g_nr.reason = "the model refused to run";
+        g_nr.reason = "模型拒绝运行";
         if (g_nr.lastModelError && *g_nr.lastModelError())
         {
             g_nr.modelError = g_nr.lastModelError();
@@ -3952,11 +3952,11 @@ void EvaluateInternal(ID3D12GraphicsCommandList* cmdList, NVSDK_NGX_Parameter* p
         if (!cfg.DlssNrEnabled.value_or_default())
         { DeferredSr::Cancel(); Late::Cancel(); return; }
         if (timingQueue || State::Instance().swapchainInteropApi != SwapchainInteropApi::None)
-        { DeferredSr::Cancel(); Late::Cancel(); Late::Say("This option needs a native DirectX 12 game."); return; }
+        { DeferredSr::Cancel(); Late::Cancel(); Late::Say("此选项需要原生 DirectX 12 游戏。"); return; }
         if (finishedMode == 2)
         {
             if (rayReconstruction)
-            { DeferredSr::Cancel(); Late::Cancel(); Late::Say("Running the model before SR with this option does not support Ray Reconstruction."); return; }
+            { DeferredSr::Cancel(); Late::Cancel(); Late::Say("使用此选项时，模型在超分前运行不支持光线重建。"); return; }
             if (cmdList && params)
             {
                 const auto submitted = State::Instance().frameCount;
@@ -3977,7 +3977,7 @@ void EvaluateInternal(ID3D12GraphicsCommandList* cmdList, NVSDK_NGX_Parameter* p
     {
         DeferredSr::Cancel();
         if (rayReconstruction && cfg.DlssNrEnabled.value_or_default() && cfg.DlssNrDeferredDlss.value_or_default())
-            DeferredSr::Say("inactive: Ray Reconstruction; using ordinary before/after NR placement");
+            DeferredSr::Say("未启用: 光线重建；改用普通的 NR 前置/后置");
     }
     else
     {

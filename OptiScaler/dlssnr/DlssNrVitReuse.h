@@ -268,9 +268,9 @@ class Filter
         char buf[128];
 
         if (disabled_)
-            return "off for this session (unexpected NR launch order)";
+            return "本次会话已关闭（NR 启动顺序异常）";
 
-        snprintf(buf, sizeof buf, "computed %llu, reused %llu", (unsigned long long) computed_,
+        snprintf(buf, sizeof buf, "已计算 %llu，已复用 %llu", (unsigned long long) computed_,
                  (unsigned long long) reused_);
         return buf;
     }

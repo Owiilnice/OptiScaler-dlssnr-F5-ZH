@@ -476,7 +476,7 @@ bool LoadForwarder()
 
     if (!path.has_value())
     {
-        Fail("nvngx.dll_dlssnr.dll was not found beside OptiScaler or the game");
+        Fail("在 OptiScaler 或游戏旁边未找到 nvngx.dll_dlssnr.dll");
         return false;
     }
 
@@ -484,7 +484,7 @@ bool LoadForwarder()
 
     if (g_vk.forwarder == nullptr)
     {
-        Fail("the forwarder would not load");
+        Fail("转发器无法加载");
         return false;
     }
 
@@ -496,7 +496,7 @@ bool LoadForwarder()
 
     if (g_vk.init == nullptr || g_vk.create == nullptr || g_vk.evaluate == nullptr)
     {
-        Fail("Update nvngx.dll_dlssnr.dll from the complete release (NR v2 exports required)");
+        Fail("请从完整发行包更新 nvngx.dll_dlssnr.dll（需要 NR v2 导出）");
         return false;
     }
 
@@ -890,7 +890,7 @@ static void EvaluateAtSeamVk(VkCommandBuffer cmdBuffer, NVSDK_NGX_Parameter* par
 
         if (!snippet.has_value())
         {
-            Fail("nvngx_dlssnr.dll was not found beside OptiScaler or the game");
+            Fail("在 OptiScaler 或游戏旁边未找到 nvngx_dlssnr.dll");
             return;
         }
 
@@ -901,7 +901,7 @@ static void EvaluateAtSeamVk(VkCommandBuffer cmdBuffer, NVSDK_NGX_Parameter* par
         if (probe != 15)
         {
             LOG_ERROR("DLSS-NR Vulkan: the model's Vulkan surface is incomplete (probe {})", probe);
-            Fail("the model does not expose a complete Vulkan surface");
+            Fail("该模型未暴露完整的 Vulkan 表面");
             return;
         }
 
@@ -912,7 +912,7 @@ static void EvaluateAtSeamVk(VkCommandBuffer cmdBuffer, NVSDK_NGX_Parameter* par
         if (result != 1)
         {
             LOG_ERROR("DLSS-NR Vulkan: NVSDK_NGX_VULKAN_Init_Ext returned {}", result);
-            Fail("the model would not initialise on this Vulkan device");
+            Fail("模型无法在此 Vulkan 设备上初始化");
             return;
         }
 
@@ -925,7 +925,7 @@ static void EvaluateAtSeamVk(VkCommandBuffer cmdBuffer, NVSDK_NGX_Parameter* par
         if (NVSDK_NGX_VULKAN_AllocateParameters(&g_vk.capabilityParams) != NVSDK_NGX_Result_Success ||
             g_vk.capabilityParams == nullptr)
         {
-            Fail("a parameter block could not be allocated");
+            Fail("无法分配参数块");
             return;
         }
     }
@@ -962,7 +962,7 @@ static void EvaluateAtSeamVk(VkCommandBuffer cmdBuffer, NVSDK_NGX_Parameter* par
         if (!g_vk.pass->IsInit())
         {
             g_vk.pass.reset();
-            Fail("the composition pass could not be created");
+            Fail("无法创建合成通道");
             return;
         }
     }
@@ -1033,7 +1033,7 @@ static void EvaluateAtSeamVk(VkCommandBuffer cmdBuffer, NVSDK_NGX_Parameter* par
 
         if (!ok)
         {
-            Fail("the pass could not allocate its own surfaces");
+            Fail("该通道无法分配自己的表面");
             return;
         }
 
@@ -1066,7 +1066,7 @@ static void EvaluateAtSeamVk(VkCommandBuffer cmdBuffer, NVSDK_NGX_Parameter* par
                              tuning.skin, tuning.autoMask ? 1 : 0, 1);
         if (!feature)
         {
-            Fail("the model would not build a feature on this device");
+            Fail("模型无法在此设备上构建特性");
             return;
         }
 
@@ -1084,7 +1084,7 @@ static void EvaluateAtSeamVk(VkCommandBuffer cmdBuffer, NVSDK_NGX_Parameter* par
             VkEventCreateInfo info { VK_STRUCTURE_TYPE_EVENT_CREATE_INFO };
             if (vkCreateEvent(device, &info, nullptr, &g_vk.creationReady) != VK_SUCCESS)
             {
-                Fail("could not allocate the model creation marker");
+                Fail("无法分配模型创建标记");
                 return;
             }
         }
@@ -1411,7 +1411,7 @@ static void EvaluateAtSeamVk(VkCommandBuffer cmdBuffer, NVSDK_NGX_Parameter* par
                              g_vk.proxy.view, g_vk.keep.view,
                              beforeSr ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL))
     {
-        Fail("the encode dispatch failed");
+        Fail("编码调度失败");
         return;
     }
 
@@ -1483,7 +1483,7 @@ static void EvaluateAtSeamVk(VkCommandBuffer cmdBuffer, NVSDK_NGX_Parameter* par
                                      VK_NULL_HANDLE, VK_NULL_HANDLE, g_vk.proxySmall.view, VK_NULL_HANDLE,
                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL))
             {
-                Fail("the downsample dispatch failed");
+                Fail("降采样调度失败");
                 return;
             }
         }
@@ -1599,7 +1599,7 @@ static void EvaluateAtSeamVk(VkCommandBuffer cmdBuffer, NVSDK_NGX_Parameter* par
     if (evaluated != 1)
     {
         LOG_ERROR("DLSS-NR Vulkan: evaluate returned {}", evaluated);
-        Fail("the model refused to evaluate");
+        Fail("模型拒绝求值");
         return;
     }
 
@@ -1713,7 +1713,7 @@ static void EvaluateAtSeamVk(VkCommandBuffer cmdBuffer, NVSDK_NGX_Parameter* par
                              beforeSr ? g_vk.preColor.view : colour->Resource.ImageViewInfo.ImageView,
                              VK_NULL_HANDLE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL))
     {
-        Fail("the resolve dispatch failed");
+        Fail("解析调度失败");
         return;
     }
 
