@@ -71,6 +71,8 @@ tools/                  一次性工具，平时不用跑
   build_structural.py   抽取结构性改动规则
   probe.py              查某个英文串在两侧的全部出现处，用于判定该不该翻
 .github/workflows/localize.yml
+.upstream-revision      基线：上次同步到的上游 SHA（自动生成）
+.upstream-files         上次同步放进工作区的上游文件清单（自动生成，gitignore）
 ```
 
 ## 本地跑一遍
@@ -112,6 +114,17 @@ python scripts/verify.py <重放后的源码树> <参考汉化版源码树>
 参考汉化版是人工确认过能跑的，但不等于完美。已接受的差异单独记账，
 任何**新增**差异都会让 CI 变红——这样上游的行为变化不会悄悄溜过去。
 
+**工作区是「构建沙箱」，不是「工作目录」**
+`sync_upstream.sh` 跑完以后，工作区里除了白名单资产，其余都是上游源码，
+随时会被下一次同步覆盖。所以别在这个目录里放东西。脚本清理时只认两样：
+
+- `.github/` 下凡「出现在上游 tree 里」的文件一律删（白名单只有 `localize.yml`）
+- 上次同步写下的 `.upstream-files` 清单里、这次上游已经没有的文件，删
+
+两条都不涉及「工作区里凡不在上游 tree 的就删」——那条会把用户自己的本地文件
+一起删掉。也正因为判据是「在上游 tree 里」而不是「git 跟踪的」，被误提交的上游
+文件才拦得住：误提交的文件同样是被跟踪的。
+
 ## 已知的取舍
 
 - `scan_strings.py` 会漏报「单个词」的界面标签（如 `Upscaler`），换取的是不把 DLL 名、
@@ -120,3 +133,6 @@ python scripts/verify.py <重放后的源码树> <参考汉化版源码树>
   宁可留一条英文，也不要翻错一个功能串。
 - `sync_upstream.sh` 同步后不会自动处理上游的 rebase / force-push；
   基线记录在 `.upstream-revision` 里，出问题可以对着查。
+- 首次运行时没有 `.upstream-files`，脚本会跳过「上游已移除」清理（正常，无副作用）。
+- 本仓库的 git 历史里还留着早期 fork 带进来的上游源码。不影响使用，
+  但仓库体积偏大；真要清得用 `filter-repo` 重写历史 + force push，代价是丢掉 fork 关系。
