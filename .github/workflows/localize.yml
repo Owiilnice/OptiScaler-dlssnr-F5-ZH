@@ -258,7 +258,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: release-7z
-          path: dist
+          path: artifact
 
       - name: 创建 Release
         env:
@@ -268,7 +268,26 @@ jobs:
           SHA: ${{ needs.sync.outputs.sha }}
         run: |
           set -e
-          ZIP=$(ls dist/*.7z | head -1)
+
+          # 包内 7z 的层级由 upload-artifact 的「公共父目录」决定。编译任务里
+          # 同时传了 dist/*.7z 和 apply-report.json，公共父目录退化成工作区根，
+          # 于是包内是 dist/xxx.7z；下载到 dist/ 后就成了 dist/dist/xxx.7z。
+          # 以前写死 `ls dist/*.7z` 会直接落空，被 set -e 干掉，页面只留
+          # 「exit code 1」，看不出原因。改成递归找，不依赖层级。
+          echo "== 产物实际内容 =="
+          find artifact -type f -printf '%10s  %p\n' | sort -k2
+          ZIP=$(find artifact -type f -name '*.7z' | head -1)
+          if [ -z "$ZIP" ]; then
+            echo "::error::产物里没有 .7z 文件，无法发布"
+            exit 1
+          fi
+          echo "使用产物: $ZIP ($(du -h "$ZIP" | cut -f1))"
+
+          if [ -z "$TAG" ]; then
+            echo "::error::tag 为空，无法发布"
+            exit 1
+          fi
+
           if [ "$RTYPE" = "release" ]; then
             TITLE="Release $TAG"
             NOTES="对应上游 $TAG 的简体中文版"
@@ -293,12 +312,26 @@ jobs:
             C="$TAG$S"
             if ! gh release view "$C" --repo "${{ github.repository }}" >/dev/null 2>&1; then
               TAG="$C"
-              [ -n "$S" ] && TITLE="$TITLE ($(echo $S | tr -d -))"
+              if [ -n "$S" ]; then
+                TITLE="$TITLE ($(echo "$S" | tr -d '-'))"
+              fi
               FOUND=1
               break
             fi
           done
-          [ -z "$FOUND" ] && { echo "tag 已占满，跳过发布"; exit 0; }
-          gh release create "$TAG" "$ZIP" --repo "${{ github.repository }}" \
-            --title "$TITLE" --notes "$NOTES" --prerelease="$PRE"
+          if [ -z "$FOUND" ]; then
+            echo "tag 已占满，跳过发布"
+            exit 0
+          fi
+
+          # gh 自己失败不会产生注解，页面只剩 exit code 1。把 stderr 逐行
+          # 打成 ::error::，这样出错原因在 Annotations 里直接可读。
+          if ! gh release create "$TAG" "$ZIP" --repo "${{ github.repository }}" \
+                 --title "$TITLE" --notes "$NOTES" --prerelease="$PRE" 2> gh.err; then
+            echo "::error::gh release create 失败："
+            while IFS= read -r l; do
+              if [ -n "$l" ]; then echo "::error::$l"; fi
+            done < gh.err
+            exit 1
+          fi
           echo "已发布 $TAG"
