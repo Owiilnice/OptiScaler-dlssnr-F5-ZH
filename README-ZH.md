@@ -61,6 +61,33 @@
 
 **正式版绝不覆盖**：同 tag 的 Release 已存在时直接报错退出，不会静默覆盖已发布的包。
 
+## 发布包内容
+
+包体是 `x64\Release\a\` 整目录（上游 Release 后置事件已经把运行库、`Licenses\`、
+setup 脚本都拷进去了），再加上几项来自仓库根的文件，然后 `7z -mx=9` 打包。
+
+`scripts/build.ps1` 负责三件事，缺一项包就不完整：
+
+1. **剔除构建中间产物** —— `*.pdb` `*.lib` `*.exp` `*.ilk`。整目录照搬会把转发器的
+   PDB 带出去，那里面有完整符号表和构建机的源码路径，既没用又泄漏路径。
+   上游的 `package_release.ps1` 也是这么删的。
+2. **补仓库根文件** —— `README.md` `INSTALL-DLSSNR.md` `LICENSE` `get_streamline.ps1`
+   `docs\` `redist\`。这些不在编译输出目录里，只搬 `a\` 会漏掉。
+3. **生成 `SHA256SUMS.txt`** —— 相对路径用正斜杠、无 BOM 的 UTF-8。
+
+**体积参照**：包约 54 MB。这不是「内容比上游少」——上游自己的 nightly 也是
+`7z a -r` 打同一个 `a\` 目录，同样是 53.7 MB。差的是压缩算法：上游那个 126 MB 的
+正式包用 `Compress-Archive`（ZIP/Deflate，32 KB 窗口、逐文件独立压缩），
+而包里 78 MB 的 `libxess.dll`、40 MB 的 `amd_fidelityfx_framegeneration_dx12.dll`
+这类签名 DLL 熵很高，Deflate 只能压掉 20~35%；`7z` 的 LZMA2 用大字典 + 固实块
+跨文件找冗余，整体能压到 26%。**同样的 212 MB 原始内容，Deflate 出 131.8 MB，
+LZMA2 出 54 MB。**
+
+**已知缺项**：上游正式包里的 `Optional\nvngx.dll_dlssnr.dll`（1.31 MB，AMD/Intel
+厂商中立后端）我们没带。它不由本仓库的解决方案产出——上游的 `package_release.ps1`
+是通过 `-PortBackendDll <路径>` 从外部传进去的，而仓库里的 `package_release.yml`
+并没有传这个参数，说明发布时是手工提供的。要补得先搞清楚它的构建方式。
+
 ## 目录结构
 
 ```
