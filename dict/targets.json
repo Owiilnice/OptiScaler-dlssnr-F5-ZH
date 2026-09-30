@@ -1,0 +1,14 @@
+{
+ "_comment": "字面量改写的作用范围。只碰这些文件，其他文件一律不动 —— 这是防止误译 ini 键名、DLL 名、日志串的第一道闸。上游在 menu/ 或 dlssnr/ 下新增源文件会自动纳入。",
+ "globs": [
+  "OptiScaler/menu/**/*.cpp",
+  "OptiScaler/menu/**/*.h",
+  "OptiScaler/dlssnr/**/*.cpp",
+  "OptiScaler/dlssnr/**/*.h",
+  "OptiScaler/shaders/dlssnr/**/*.cpp",
+  "OptiScaler/shaders/dlssnr/**/*.inl"
+ ],
+ "exclude": [
+  "OptiScaler/menu/font/ChineseGlyphRanges.h"
+ ]
+}

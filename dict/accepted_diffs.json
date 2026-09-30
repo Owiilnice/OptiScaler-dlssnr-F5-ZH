@@ -1,0 +1,34 @@
+{
+ "_comment": "重放结果与参考汉化版「已知且已接受」的差异。verify.py 会把这些挑出来不报警；任何不在此列的差异都会让 CI 变红，逼人看一眼。",
+ "_why": "参考汉化版是人工确认过能跑的版本，但不等于完美。下面这些是重放版有意做得更好的地方，或者是参考版自身的疏漏。",
+ "entries": [
+  {
+   "file": "OptiScaler/menu/menu_common.cpp",
+   "ref": "Unused",
+   "ours": "未使用",
+   "count": 1,
+   "why": "DLSS 预设表里 PRESET O 那一行的说明串。参考汉化版把同表另外 4 行都译成「未使用」，只漏了这一行。重放版按词典统一译出。"
+  },
+  {
+   "file": "OptiScaler/menu/menu_common.cpp",
+   "ref": " w/Dx12",
+   "ours": "（带 Dx12）",
+   "count": 1,
+   "why": "API 状态行的 Dx12 兼容层后缀。参考汉化版在另外 2 处译了「（带 Dx12）」，漏了顶部状态行这一处。重放版统一译出。"
+  },
+  {
+   "file": "OptiScaler/menu/menu_common.cpp",
+   "ref": "开启",
+   "ours": "开",
+   "count": 1,
+   "why": "色调映射状态徽标。参考汉化版「开/关」与「开启/关闭」混用，重放版统一成「开/关」与 OFF 配对。纯显示串，不参与任何比较。"
+  },
+  {
+   "file": "OptiScaler/menu/menu_common.cpp",
+   "ref": "关闭",
+   "ours": "关",
+   "count": 3,
+   "why": "同上，统一成「关」。"
+  }
+ ]
+}

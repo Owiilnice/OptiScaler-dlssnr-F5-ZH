@@ -1,0 +1,102 @@
+{
+ "_comment": "按「文件 + 所在行上下文」分派的例外规则。键 \"*\" 表示对所有文件生效；同名字面量在文件级规则里定义时，文件级覆盖全局。匹配顺序：数组里第一个 ctx 命中者胜出；末尾不带 ctx 的条目是兜底默认值。zh 与原文相同时 = 该上下文保持英文不译。",
+ "_why": [
+  "这些条目全都是 verify.py 拿重放结果和已人工确认的参考汉化版对账后，逐条判定的结果。",
+  "判定标准：字符串是否参与 ini 读写、与配置值比较、作为 ImGui 控件 ID 或 GPU 调试对象名。是则必须保持英文。"
+ ],
+
+ "*": {
+  "yes": [
+   {
+    "ctx": "status.DllLoaded",
+    "zh": "是",
+    "note": "DLSS DLL 加载状态行，参考汉化版译了"
+   },
+   {
+    "zh": "yes",
+    "note": "其余出现处（input_system 的 YesNo() 辅助函数、NR 状态行、shader 调试输出）参考汉化版刻意保留英文，保持英文"
+   }
+  ],
+  "no": [
+   {
+    "ctx": "status.DllLoaded",
+    "zh": "否",
+    "note": "同上，与 yes 配对"
+   },
+   {
+    "zh": "no",
+    "note": "同上，保持英文"
+   }
+  ],
+  "Neural Rendering": [
+   {
+    "ctx": "Keybind",
+    "zh": "神经渲染",
+    "note": "快捷键设置项的显示名，参考汉化版译了"
+   },
+   {
+    "zh": "Neural Rendering",
+    "note": "其余出现处是 DlssNr_Dx12 / DlssNr_Vk 的 GPU 调试对象名，RenderDoc / PIX 里可见，必须保持英文"
+   }
+  ],
+  "Balanced": [
+   {
+    "ctx": "kNames",
+    "zh": "Balanced",
+    "note": "DlssNr_Dx12 的 kNames[] 是内部档位名数组，不是界面标签，保持英文"
+   },
+   {
+    "zh": "平衡",
+    "note": "其余是界面上给用户看的档位标签"
+   }
+  ]
+ },
+
+ "OptiScaler/menu/menu_common.cpp": {
+  "Auto": [
+   {
+    "ctx": "AnisotropyOverride",
+    "zh": "自动",
+    "note": "各向异性过滤的「自动」下拉项，纯显示"
+   },
+   {
+    "ctx": "MenuScale",
+    "zh": "自动",
+    "note": "菜单缩放的「自动」标签，纯显示"
+   }
+  ],
+  "Motion": [
+   {
+    "ctx": "AddResourceBarrier",
+    "zh": "运动矢量",
+    "note": "GPU 资源屏障的调试名，RenderDoc/PIX 里可见，要和面板上的「运动矢量」一致"
+   },
+   {
+    "zh": "运动",
+    "note": "资源栏的按钮标签"
+   }
+  ],
+  "ON": [
+   {
+    "zh": "开",
+    "note": "色调映射状态徽标，与 OFF 配对；原汉化版里「开」「开启」混用，此处统一"
+   }
+  ],
+  "OFF": [
+   {
+    "zh": "关",
+    "note": "色调映射状态徽标，与 ON 配对；原汉化版里「关」「关闭」混用，此处统一"
+   }
+  ]
+ },
+
+ "OptiScaler/dlssnr/DlssNr_Menu.cpp": {
+  "s": [
+   {
+    "ctx": "anchors.size() == 1",
+    "zh": "",
+    "note": "英文复数后缀 \"(%u point%s)\"，中文没有复数，整串去掉"
+   }
+  ]
+ }
+}

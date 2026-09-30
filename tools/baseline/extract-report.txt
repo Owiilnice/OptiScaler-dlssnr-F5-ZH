@@ -1,0 +1,40 @@
+词典条目: 1180
+冲突（同英文多译法）: 3
+未归类改动: 7
+人工裁决剔除 4 条（转 overrides.json）: ['Motion', 'OFF', 'ON', 's']
+人工裁决补入 2 条（无汉字译法）: ['(DXVK) ', 'NVIDIA (FP8)']
+
+== 逐文件 (配对数, 未归类) ==
+     15     0  OptiScaler/dlssnr/DlssNrFeature_Vk.cpp
+      2     0  OptiScaler/dlssnr/DlssNrVitReuse.h
+     11     0  OptiScaler/dlssnr/DlssNr_ExposureScan.cpp
+    288     2  OptiScaler/dlssnr/DlssNr_Menu.cpp
+    996    15  OptiScaler/menu/menu_common.cpp
+     32     0  OptiScaler/shaders/dlssnr/DlssNr_DeferredSr.inl
+     21     0  OptiScaler/shaders/dlssnr/DlssNr_Dx12.cpp
+     17     0  OptiScaler/shaders/dlssnr/DlssNr_Late.inl
+
+== 冲突 3 组（已剔除者不再列出）==
+
+== 未归类改动 7 处 ==
+  OptiScaler/dlssnr/DlssNr_Menu.cpp
+      - 's'
+      + ''
+  OptiScaler/dlssnr/DlssNr_Menu.cpp
+      - 'NVIDIA (FP8)'
+      + 'NVIDIA（FP8）'
+  OptiScaler/menu/menu_common.cpp
+      - '<insert 0->1>'
+      + ' ==> font/ChineseGlyphRanges.h'
+  OptiScaler/menu/menu_common.cpp
+      - '(DXVK) '
+      + '（DXVK） '
+  OptiScaler/menu/menu_common.cpp
+      - '(DXVK) '
+      + '（DXVK） '
+  OptiScaler/menu/menu_common.cpp
+      - '(DXVK) '
+      + '（DXVK） '
+  OptiScaler/menu/menu_common.cpp
+      - '<insert 0->11>'
+      + ' ==> font || wqy-microhei.ttc || wqy-microhei.ttc'

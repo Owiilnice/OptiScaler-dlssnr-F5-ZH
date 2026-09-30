@@ -1,3 +1,12 @@
-# Auto detect text files and perform LF normalization
-* text=auto
-*.sh eol=lf
+# 本仓库只装脚本和资产，要的是字节级可复现：关掉所有 EOL 转换，
+# 仓库里存什么，检出就是什么。
+#
+# 这条不是洁癖。Windows 上 core.autocrlf 默认 true，会把 .sh 检出成 CRLF，
+# 而 CI 跑在 Linux runner 上 —— CRLF 的 shell 脚本会直接报
+# "bad interpreter: /usr/bin/env bash^M" 然后整条流水线红。
+* -text
+
+*.ttc binary
+*.png binary
+*.jpg binary
+*.7z binary

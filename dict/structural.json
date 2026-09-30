@@ -1,0 +1,56 @@
+[
+ {
+  "id": "menu_common_include_fstream",
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "desc": "字体改为从文件读取，需要 <fstream>",
+  "mode": "insert_after",
+  "anchor": "#include <cfloat>",
+  "after": "#include <fstream>",
+  "marker": "#include <fstream>"
+ },
+ {
+  "id": "menu_common_include_glyphranges",
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "desc": "引入 CJK 字形范围表",
+  "mode": "insert_after",
+  "anchor": "#include \"font/Hack_Compressed.h\"",
+  "after": "#include \"font/ChineseGlyphRanges.h\"",
+  "marker": "font/ChineseGlyphRanges.h"
+ },
+ {
+  "id": "menu_common_cjk_font_block",
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "desc": "字体加载改为 CJK 候选链（内置 Hack 无汉字字形，必须外挂字体）",
+  "mode": "replace",
+  "before": "        if (Config::Instance()->TTFFontPath.has_value())\n        {\n            io.FontDefault =\n                atlas->AddFontFromFileTTF(wstring_to_string(Config::Instance()->TTFFontPath.value()).c_str(), fontSize,\n                                          &fontConfig, io.Fonts->GetGlyphRangesDefault());\n        }\n        else\n        {\n            io.FontDefault = atlas->AddFontFromMemoryCompressedBase85TTF(hack_compressed_compressed_data_base85,\n                                                                         fontSize, &fontConfig);\n        }",
+  "after": "        // Chinese localization: the built-in Hack font carries no CJK glyphs, so a\n        // CJK-capable font has to be loaded or the interface shows blanks.\n        // Priority: user setting -> font shipped beside OptiScaler -> common Windows\n        // CJK fonts. Hack stays as the last resort (Latin only).\n        const ImWchar* glyphRanges = OptiScalerLocalization::ChineseGlyphRanges();\n\n        std::vector<std::filesystem::path> fontCandidates;\n\n        if (Config::Instance()->TTFFontPath.has_value())\n            fontCandidates.emplace_back(Config::Instance()->TTFFontPath.value());\n\n        auto dllDir = Util::DllPath().parent_path();\n        fontCandidates.emplace_back(dllDir / L\"font\" / L\"wqy-microhei.ttc\");\n        fontCandidates.emplace_back(dllDir / L\"wqy-microhei.ttc\");\n        fontCandidates.emplace_back(\"font\\\\wqy-microhei.ttc\");\n        fontCandidates.emplace_back(L\"C:\\\\Windows\\\\Fonts\\\\msyh.ttc\");\n        fontCandidates.emplace_back(L\"C:\\\\Windows\\\\Fonts\\\\msyh.ttf\");\n        fontCandidates.emplace_back(L\"C:\\\\Windows\\\\Fonts\\\\simhei.ttf\");\n        fontCandidates.emplace_back(L\"C:\\\\Windows\\\\Fonts\\\\Deng.ttf\");\n        fontCandidates.emplace_back(L\"C:\\\\Windows\\\\Fonts\\\\simsun.ttc\");\n\n        std::error_code fontFsError;\n\n        for (const auto& candidate : fontCandidates)\n        {\n            if (candidate.empty() || !std::filesystem::exists(candidate, fontFsError) ||\n                !std::filesystem::is_regular_file(candidate, fontFsError))\n                continue;\n\n            // Read through the wide path so non-ASCII game folders work, then hand the\n            // buffer to ImGui (the atlas frees it).\n            std::ifstream fontStream(candidate, std::ios::binary | std::ios::ate);\n            if (!fontStream)\n                continue;\n\n            const auto fontByteCount = static_cast<std::streamsize>(fontStream.tellg());\n            if (fontByteCount <= 0)\n                continue;\n\n            void* fontData = IM_ALLOC(static_cast<size_t>(fontByteCount));\n            fontStream.seekg(0, std::ios::beg);\n\n            if (!fontStream.read(static_cast<char*>(fontData), fontByteCount))\n            {\n                IM_FREE(fontData);\n                continue;\n            }\n\n            fontStream.close();\n\n            ImFontConfig cjkFontConfig = fontConfig;\n            cjkFontConfig.FontDataOwnedByAtlas = true;\n\n            io.FontDefault = atlas->AddFontFromMemoryTTF(fontData, static_cast<int>(fontByteCount), fontSize,\n                                                         &cjkFontConfig, glyphRanges);\n\n            if (io.FontDefault != nullptr)\n            {\n                LOG_INFO(\"Chinese UI font loaded: {0}\", wstring_to_string(candidate.wstring()));\n                break;\n            }\n\n            IM_FREE(fontData);\n        }\n\n        if (io.FontDefault == nullptr)\n        {\n            LOG_WARN(\"No CJK font found, Chinese interface text will not render correctly\");\n\n            io.FontDefault =\n                atlas->AddFontFromMemoryCompressedBase85TTF(hack_compressed_compressed_data_base85, fontSize,\n                                                            &fontConfig, glyphRanges);\n        }",
+  "marker": "OptiScalerLocalization::ChineseGlyphRanges"
+ },
+ {
+  "id": "vcxproj_utf8",
+  "file": "OptiScaler/OptiScaler.vcxproj",
+  "desc": "MSVC 默认按系统 ANSI 代码页解析无 BOM 源码，中文源码必须 /utf-8",
+  "mode": "replace_all",
+  "before": "<AdditionalOptions>/w34996 %(AdditionalOptions)</AdditionalOptions>",
+  "after": "<AdditionalOptions>/utf-8 /w34996 %(AdditionalOptions)</AdditionalOptions>",
+  "marker": "/utf-8"
+ },
+ {
+  "id": "vcxproj_font_copy",
+  "file": "OptiScaler/OptiScaler.vcxproj",
+  "desc": "Release 后置事件把 font\\ 拷进输出目录",
+  "mode": "insert_after",
+  "anchor": "copy \"$(SolutionDir)external\\directx_agility_sdk\\LICENSE.txt\" $(SolutionDir)x64\\Release\\a\\Licenses\\DirectX_LICENSE.txt /Y",
+  "after": "md $(SolutionDir)x64\\Release\\a\\font\ncopy $(SolutionDir)font\\wqy-microhei.ttc $(SolutionDir)x64\\Release\\a\\font\\ /Y\ncopy $(SolutionDir)font\\README.txt $(SolutionDir)x64\\Release\\a\\font\\ /Y",
+  "marker": "x64\\Release\\a\\font"
+ },
+ {
+  "id": "package_release_font_copy",
+  "file": "package_release.ps1",
+  "desc": "打包时带上 font\\",
+  "mode": "insert_after",
+  "anchor": "Copy-Item -LiteralPath \"$root\\docs\" -Destination \"$stage\\docs\" -Recurse -Force",
+  "after": "\n# Simplified Chinese localization: the bundled CJK font. OptiScaler looks for it at\n# <game>\\font\\wqy-microhei.ttc (next to the DLL) when the UI is Chinese.\nCopy-Item -LiteralPath \"$root\\font\" -Destination \"$stage\\font\" -Recurse -Force",
+  "marker": "$stage\\font"
+ }
+]

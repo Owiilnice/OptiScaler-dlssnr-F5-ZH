@@ -1,0 +1,279 @@
+name: 汉化同步与发布
+
+# 上游 janblade/OptiScaler-F5-DLSSNR-Multipass 更新很勤，人工重做汉化必然跟不上。
+# 这条流水线把「跟上游」变成自动的：
+#   取上游源码 -> 重放汉化层 -> 扫出新串 -> 自动翻译 -> 云端编译 -> 发 Release
+#
+# 本仓库只跟踪汉化资产（dict/ overlay/ scripts/ tools/ .github/ README-ZH.md），
+# 上游源码每次现取现用，不提交。所以汉化和上游之间不存在 merge 冲突。
+#
+# 人工只在两种情况需要介入：
+#   1. apply_patch 报「结构锚点未命中」——上游改了我们动过的那段代码
+#   2. dict/untranslated.json 里积累了待裁决的串
+
+on:
+  schedule:
+    - cron: '0 21 * * *'          # 每天 21:00 UTC = 次日 05:00 北京
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: '发布类型：auto=上游有新正式版就发正式版，否则 nightly'
+        type: choice
+        options: [auto, nightly, release]
+        default: auto
+      skip_build:
+        description: '只同步与翻译，不编译'
+        type: boolean
+        default: false
+  push:
+    paths:
+      - 'dict/**'
+      - 'scripts/**'
+      - 'overlay/**'
+      - '.github/workflows/localize.yml'
+
+permissions:
+  contents: write
+
+env:
+  UPSTREAM_REPO: https://github.com/janblade/OptiScaler-F5-DLSSNR-Multipass.git
+  UPSTREAM_BRANCH: main
+
+jobs:
+  # ------------------------------------------------------------------
+  # 1. 取上游源码 + 预检锚点 + 自动补译
+  # ------------------------------------------------------------------
+  sync:
+    name: 同步上游与翻译
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.ver.outputs.tag }}
+      rtype: ${{ steps.ver.outputs.rtype }}
+      sha: ${{ steps.sync_up.outputs.sha }}
+      build_required: ${{ steps.check.outputs.required }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 取上游源码
+        id: sync_up
+        run: |
+          set +e
+          bash scripts/sync_upstream.sh "$UPSTREAM_REPO" "$UPSTREAM_BRANCH"
+          CODE=$?
+          set -e
+          SHA=$(grep -m1 '^commit=' .upstream-revision | cut -d= -f2)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          if [ $CODE -eq 0 ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+          # 让后面的步骤能读到上游版本号
+          if [ -f OptiScaler/resource.h ]; then
+            MAJ=$(grep -oP 'VER_MAJOR_VERSION\s+\K\d+'  OptiScaler/resource.h | head -1 || echo 0)
+            MIN=$(grep -oP 'VER_MINOR_VERSION\s+\K\d+'  OptiScaler/resource.h | head -1 || echo 0)
+            HOT=$(grep -oP 'VER_HOTFIX_VERSION\s+\K\d+' OptiScaler/resource.h | head -1 || echo 0)
+            echo "ver=v${MAJ}.${MIN}.${HOT}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ver=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 预检汉化锚点
+        run: |
+          # 只检测不落盘。上游动过我们改的那段代码时这里立刻红，
+          # 不用等整个编译跑完才发现。
+          set +e
+          python scripts/apply_patch.py . --check | tee precheck.log
+          CODE=${PIPESTATUS[0]}
+          set -e
+          if [ "$CODE" -eq 2 ]; then
+            echo "::error::汉化结构锚点未命中，需要人工修 dict/structural.json（日志见下）"
+            exit 1
+          fi
+
+      - name: 扫描未翻译字符串
+        id: scan
+        run: |
+          set +e
+          python scripts/scan_strings.py . --out pending.json --markdown pending.md
+          set -e
+          CNT=$(python -c "import json;print(len(json.load(open('pending.json'))))" 2>/dev/null || echo 0)
+          echo "待翻译 $CNT 条"
+          if [ "${CNT:-0}" -gt 0 ]; then
+            echo "has_new=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_new=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 自动翻译新串
+        if: steps.scan.outputs.has_new == 'true'
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: python scripts/translate.py --input pending.json
+
+      - name: 提交汉化资产变更
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dict overlay scripts tools .github README-ZH.md .upstream-revision
+          if git diff --cached --quiet; then
+            echo "资产无变更"
+          else
+            git commit -m "chore: 同步上游 ${{ steps.sync_up.outputs.sha }} 并更新汉化"
+            git push
+          fi
+
+      - name: 确定版本号与发布类型
+        id: ver
+        run: |
+          set -e
+          VER="${{ steps.sync_up.outputs.ver }}"
+          DATE=$(date -u +%Y%m%d)
+          TYPE="${{ github.event.inputs.release_type || 'auto' }}"
+          if [ "$TYPE" = "nightly" ]; then
+            TAG="nightly-$DATE"
+          elif [ "$TYPE" = "release" ] && [ -n "$VER" ]; then
+            TAG="$VER"
+          else
+            # auto：上游有正式版且本仓库没发过 -> 正式版，否则 nightly
+            STABLE=$(gh api repos/optiscaler/OptiScaler/releases/latest --jq '.tag_name' 2>/dev/null || echo "")
+            if [ -n "$VER" ] && [ "$VER" = "$STABLE" ] && \
+               ! gh release view "$VER" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+              TAG="$VER"; TYPE="release"
+            else
+              TAG="nightly-$DATE"; TYPE="nightly"
+            fi
+          fi
+          echo "tag=$TAG"   >> "$GITHUB_OUTPUT"
+          echo "rtype=$TYPE" >> "$GITHUB_OUTPUT"
+          echo "本次发布: $TAG ($TYPE)"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 判断是否需要编译
+        id: check
+        run: |
+          REQ=false
+          if [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            REQ=true
+          elif [ "${{ steps.sync_up.outputs.changed }}" = "true" ] || [ "${{ steps.scan.outputs.has_new }}" = "true" ]; then
+            REQ=true
+          fi
+          if [ "${{ github.event.inputs.skip_build }}" = "true" ]; then REQ=false; fi
+          echo "required=$REQ" >> "$GITHUB_OUTPUT"
+          echo "是否需要编译: $REQ"
+
+      - uses: actions/upload-artifact@v4
+        if: steps.scan.outputs.has_new == 'true'
+        with:
+          name: pending-strings
+          path: |
+            pending.json
+            pending.md
+          retention-days: 30
+
+  # ------------------------------------------------------------------
+  # 2. 云端编译
+  # ------------------------------------------------------------------
+  build:
+    name: Windows 编译
+    needs: sync
+    if: needs.sync.outputs.build_required == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: 'true'
+
+      - name: 取上游源码（按预检时的 SHA）
+        shell: bash
+        run: |
+          # 按 SHA 取，保证「编译的代码」和「预检通过的代码」是同一份
+          bash scripts/sync_upstream.sh "$UPSTREAM_REPO" "$UPSTREAM_BRANCH" "${{ needs.sync.outputs.sha }}" || true
+
+      - name: 重放汉化层
+        shell: bash
+        run: python scripts/apply_patch.py . --report apply-report.json
+
+      - name: 加入 MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: 编译
+        shell: pwsh
+        run: pwsh scripts/build.ps1 -SourceDir "$env:GITHUB_WORKSPACE" -OutDir "$env:GITHUB_WORKSPACE/dist/ZH"
+
+      - name: 打包 7z
+        shell: pwsh
+        run: |
+          Push-Location "$env:GITHUB_WORKSPACE/dist/ZH"
+          7z a -t7z -mx=9 "$env:GITHUB_WORKSPACE/dist/OptiScaler-ZH-${{ needs.sync.outputs.tag }}.7z" "*"
+          Pop-Location
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-7z
+          path: |
+            dist/*.7z
+            apply-report.json
+          retention-days: 7
+
+  # ------------------------------------------------------------------
+  # 3. 发布
+  # ------------------------------------------------------------------
+  release:
+    name: 发布
+    needs: [sync, build]
+    if: needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-7z
+          path: dist
+
+      - name: 创建 Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.sync.outputs.tag }}
+          RTYPE: ${{ needs.sync.outputs.rtype }}
+          SHA: ${{ needs.sync.outputs.sha }}
+        run: |
+          set -e
+          ZIP=$(ls dist/*.7z | head -1)
+          if [ "$RTYPE" = "release" ]; then
+            TITLE="Release $TAG"
+            NOTES="对应上游 $TAG 的简体中文版"
+            PRE=false
+          else
+            TITLE="Nightly $TAG"
+            NOTES="每日自动构建：上游最新源码 + 简体中文汉化"
+            PRE=true
+          fi
+          NOTES="$NOTES
+
+          上游 commit: \`$SHA\`
+          构建自 $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          # nightly 同日重复触发时加序号；正式版绝不覆盖
+          if [ "$RTYPE" = "release" ] && gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "::error::$TAG 已存在，拒绝覆盖"
+            exit 1
+          fi
+          FOUND=""
+          for S in "" "-2" "-3" "-4" "-5"; do
+            C="$TAG$S"
+            if ! gh release view "$C" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+              TAG="$C"
+              [ -n "$S" ] && TITLE="$TITLE ($(echo $S | tr -d -))"
+              FOUND=1
+              break
+            fi
+          done
+          [ -z "$FOUND" ] && { echo "tag 已占满，跳过发布"; exit 0; }
+          gh release create "$TAG" "$ZIP" --repo "${{ github.repository }}" \
+            --title "$TITLE" --notes "$NOTES" --prerelease="$PRE"
+          echo "已发布 $TAG"

@@ -1,0 +1,14 @@
+比对文件 614 个（另有 31 个文件只存在于参考版，未纳入比对）
+与参考版的差异 6 处：已知已接受 6，新增 0
+词典占位符不一致 0 条
+
+
+== 已知已接受 ==
+  x1  OptiScaler/menu/menu_common.cpp: ' w/Dx12' -> '（带 Dx12）'
+      API 状态行的 Dx12 兼容层后缀。参考汉化版在另外 2 处译了「（带 Dx12）」，漏了顶部状态行这一处。重放版统一译出。
+  x1  OptiScaler/menu/menu_common.cpp: 'Unused' -> '未使用'
+      DLSS 预设表里 PRESET O 那一行的说明串。参考汉化版把同表另外 4 行都译成「未使用」，只漏了这一行。重放版按词典统一译出。
+  x3  OptiScaler/menu/menu_common.cpp: '关闭' -> '关'
+      同上，统一成「关」。
+  x1  OptiScaler/menu/menu_common.cpp: '开启' -> '开'
+      色调映射状态徽标。参考汉化版「开/关」与「开启/关闭」混用，重放版统一成「开/关」与 OFF 配对。纯显示串，不参与任何比较。

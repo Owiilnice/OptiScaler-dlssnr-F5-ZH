@@ -1,0 +1,134 @@
+[
+ {
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "line": 1716,
+  "call": "ImGui::Begin",
+  "en": "Splash"
+ },
+ {
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "line": 2096,
+  "call": "StrFmt",
+  "en": "FPS: %6.1f/%5.1f, Avg: %6.1f"
+ },
+ {
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "line": 2257,
+  "call": "ImGui::Text",
+  "en": "FGId: %llu, RfxId: %llu"
+ },
+ {
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "line": 2317,
+  "call": "ImGui::Text",
+  "en": "FGId: %llu, RfxId: %llu"
+ },
+ {
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "line": 2501,
+  "call": "ImGui::Text",
+  "en": "nvngx_dlss : %s"
+ },
+ {
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "line": 2503,
+  "call": "ImGui::Text",
+  "en": "nvngx_dlssd : %s"
+ },
+ {
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "line": 2507,
+  "call": "ImGui::Text",
+  "en": "nvngx.dll: %s"
+ },
+ {
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "line": 2512,
+  "call": "ImGui::Text",
+  "en": "libxess: %s"
+ },
+ {
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "line": 2517,
+  "call": "ImGui::Text",
+  "en": "FSR 3.1: %s"
+ },
+ {
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "line": 2519,
+  "call": "ImGui::Text",
+  "en": "FSR 3.1 SR: %s"
+ },
+ {
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "line": 2521,
+  "call": "ImGui::Text",
+  "en": "FSR 3.1 FG: %s"
+ },
+ {
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "line": 2584,
+  "call": "ImGui::Text",
+  "en": "（DXVK） "
+ },
+ {
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "line": 2603,
+  "call": "ImGui::Text",
+  "en": "（DXVK） "
+ },
+ {
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "line": 2621,
+  "call": "ImGui::Text",
+  "en": "Vulkan %s| %s %d.%d.%d%s"
+ },
+ {
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "line": 2621,
+  "call": "ImGui::Text",
+  "en": "（DXVK） "
+ },
+ {
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "line": 2800,
+  "call": "StrFmt",
+  "en": "FSR %s"
+ },
+ {
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "line": 2805,
+  "call": "StrFmt",
+  "en": "FSR %s##%d"
+ },
+ {
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "line": 4049,
+  "call": "StrFmt",
+  "en": "FSR %s"
+ },
+ {
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "line": 4054,
+  "call": "StrFmt",
+  "en": "FSR %s"
+ },
+ {
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "line": 5071,
+  "call": "StrFmt",
+  "en": "FSR %s"
+ },
+ {
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "line": 5076,
+  "call": "StrFmt",
+  "en": "FSR %s"
+ },
+ {
+  "file": "OptiScaler/menu/menu_common.cpp",
+  "line": 7258,
+  "call": "Keybind",
+  "en": "Menu"
+ }
+]
