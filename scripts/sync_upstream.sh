@@ -32,12 +32,49 @@ UPSTREAM_BRANCH="${2:?缺上游分支名}"
 UPSTREAM_SHA="${3:-}"
 WANT_SUBMODULES="${SYNC_SUBMODULES:-0}"
 
-# ubuntu runner 上 python 可能只叫 python3，windows runner 上叫 python
+# 强制 Python 用 UTF-8 收发文本。
+#
+# 这条不是可选项：脚本里的诊断输出全是中文，而英文版 Windows runner 的默认
+# 输出编码是 cp1252 —— print 中文直接抛 UnicodeEncodeError 退出。
+# 这就是「编译任务（windows）一直红、同步任务（ubuntu，UTF-8）正常、
+# 本地（中文 Windows，cp936 能编码汉字）也测不出来」的真正原因。
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
+
+# ubuntu runner 上 python 可能只叫 python3，windows runner 上叫 python。
+# 光用 command -v 不够：Windows 上 python3 可能指向应用商店的占位程序，
+# 能「找到」但跑不起来。所以要真的执行一次确认。
 PY=""
 for c in python3 python; do
-  if command -v "$c" >/dev/null 2>&1; then PY="$c"; break; fi
+  if command -v "$c" >/dev/null 2>&1 && "$c" -c "pass" >/dev/null 2>&1; then
+    PY="$c"; break
+  fi
 done
-[ -n "$PY" ] || { echo "找不到 python"; exit 1; }
+if [ -z "$PY" ]; then
+  echo "::error::找不到可用的 python（试过 python3 / python）"
+  for c in python3 python; do
+    printf '  %-8s -> %s\n' "$c" "$(command -v "$c" 2>/dev/null || echo '未找到')"
+  done
+  exit 3
+fi
+echo "python: $PY ($("$PY" -c 'import sys;print(sys.version.split()[0])'))"
+
+# 跑一段从 stdin 读入的 python，失败时把 stderr 尾巴打成 ::error:: 注解。
+# 拿不到 job 日志时，注解是唯一能看到 traceback 的地方。
+run_py() {   # run_py <说明> [python 参数...]
+  local what="$1"; shift
+  local err
+  err=$(mktemp)
+  if "$PY" - "$@" 2>"$err"; then
+    rm -f "$err"; return 0
+  fi
+  echo "::error::$what 失败，Python 输出："
+  tail -n 15 "$err" | while IFS= read -r l; do
+    [ -n "$l" ] && echo "::error::$what: $l"
+  done
+  rm -f "$err"
+  return 1
+}
 
 # 本仓库自己的资产，绝不允许被上游覆盖。
 # .gitignore / .gitattributes 也在这里：它们会直接影响 git 对「哪些文件算我们的资产」的判断，
@@ -97,7 +134,7 @@ git checkout "$HEAD_SHA" -- . "${KEEP[@]}"
 #
 #       判据必须是「在上游 tree 里」而不是「git 跟踪的」—— 被误提交的上游文件
 #       同样是被跟踪的，用后者当判据等于什么都没判（第一版修复就栽在这里）。
-"$PY" - "$HEAD_SHA" <<'PY'
+run_py "清理上游残留" "$HEAD_SHA" <<'PY'
 import os, re, subprocess, sys
 
 sha = sys.argv[1]

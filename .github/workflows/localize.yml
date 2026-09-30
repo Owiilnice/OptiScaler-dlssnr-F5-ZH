@@ -38,6 +38,11 @@ permissions:
 env:
   UPSTREAM_REPO: https://github.com/janblade/OptiScaler-F5-DLSSNR-Multipass.git
   UPSTREAM_BRANCH: main
+  # 所有脚本的诊断输出都是中文。Windows runner 的默认输出编码是 cp1252，
+  # 不加这个的话 python 一 print 中文就 UnicodeEncodeError 退出 ——
+  # 编译任务（windows）红、同步任务（ubuntu）正常，根因就在这里。
+  PYTHONUTF8: '1'
+  PYTHONIOENCODING: utf-8
 
 jobs:
   # ------------------------------------------------------------------
