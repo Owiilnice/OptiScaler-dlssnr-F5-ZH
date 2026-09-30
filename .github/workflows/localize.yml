@@ -12,8 +12,11 @@ name: 汉化同步与发布
 #   2. dict/untranslated.json 里积累了待裁决的串
 
 on:
-  schedule:
-    - cron: '0 21 * * *'          # 每天 21:00 UTC = 次日 05:00 北京
+  # 这里原本还有一条 schedule（每天 21:00 UTC 无人值守跑一遍）。已按需求去掉：
+  # 汉化改成按需触发，不再自动发版。
+  # 要恢复就取消下面两行的注释：
+  #   schedule:
+  #     - cron: '0 21 * * *'
   workflow_dispatch:
     inputs:
       release_type:

@@ -32,6 +32,15 @@
 
 ## 日常维护
 
+**触发方式**（工作流没有定时任务，只在下面两种情况跑）：
+
+| 触发 | 什么时候跑 |
+| --- | --- |
+| `push` | 改动 `dict/` `scripts/` `overlay/` 或 `localize.yml` 本身时自动跑一遍 |
+| `workflow_dispatch` | 在 Actions 页面点 **Run workflow** 手动跑，可选 `release_type` 和 `skip_build` |
+
+发布类型默认 `auto`：上游发了新正式版就发对应的中文正式版，否则发当日 nightly。
+
 绝大多数时候是零人工：
 
 - 上游改了别处 → CI 自动重放 → 编译 → 发 Release
