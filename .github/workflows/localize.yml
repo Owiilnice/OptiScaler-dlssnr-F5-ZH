@@ -348,6 +348,16 @@ jobs:
             exit 0
           fi
 
+          # 7z 的文件名是编译任务按 sync 阶段的 tag 起的（OptiScaler-ZH-nightly-20260930.7z），
+          # 而这里可能因为去重把 tag 变成了 nightly-20260930-2。不改名的话，
+          # 资产名和它所在的 release tag 对不上，用户看不出来是同一个东西。
+          NEWZIP="$(dirname "$ZIP")/OptiScaler-ZH-$TAG.7z"
+          if [ "$ZIP" != "$NEWZIP" ]; then
+            mv "$ZIP" "$NEWZIP"
+            echo "资产改名: $(basename "$ZIP") -> $(basename "$NEWZIP")"
+            ZIP="$NEWZIP"
+          fi
+
           # gh 自己失败不会产生注解，页面只剩 exit code 1。把 stderr 逐行
           # 打成 ::error::，这样出错原因在 Annotations 里直接可读。
           if ! gh release create "$TAG" "$ZIP" --repo "${{ github.repository }}" \
