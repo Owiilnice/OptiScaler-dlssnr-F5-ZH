@@ -80,11 +80,22 @@ jobs:
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
-          # 让后面的步骤能读到上游版本号
+          # 让后面的步骤能读到上游版本号。
+          # 这个 fork 有两套版本号：VER_MAJOR/MINOR/HOTFIX 是冻结的「上游同步
+          # 标记」（长期停在 0.7.7，还被 XeSS/FSR 包装层拿去对游戏伪装引擎版本），
+          # fork 自己的发布号在 NR_RELEASE_*（v0.1.24 这种，对应上游仓库的
+          # git tag vX.Y.Z-slug）。要的是后者。
+          # 老版本可能还没有 NR_RELEASE_*，回退到 VER_*。
           if [ -f OptiScaler/resource.h ]; then
-            MAJ=$(grep -oP 'VER_MAJOR_VERSION\s+\K\d+'  OptiScaler/resource.h | head -1 || echo 0)
-            MIN=$(grep -oP 'VER_MINOR_VERSION\s+\K\d+'  OptiScaler/resource.h | head -1 || echo 0)
-            HOT=$(grep -oP 'VER_HOTFIX_VERSION\s+\K\d+' OptiScaler/resource.h | head -1 || echo 0)
+            RH=OptiScaler/resource.h
+            MAJ=$(grep -oP 'NR_RELEASE_MAJOR_VERSION\s+\K\d+'  "$RH" | head -1)
+            MIN=$(grep -oP 'NR_RELEASE_MINOR_VERSION\s+\K\d+'  "$RH" | head -1)
+            HOT=$(grep -oP 'NR_RELEASE_HOTFIX_VERSION\s+\K\d+' "$RH" | head -1)
+            if [ -z "$MAJ" ] || [ -z "$MIN" ] || [ -z "$HOT" ]; then
+              MAJ=$(grep -oP 'VER_MAJOR_VERSION\s+\K\d+'  "$RH" | head -1)
+              MIN=$(grep -oP 'VER_MINOR_VERSION\s+\K\d+'  "$RH" | head -1)
+              HOT=$(grep -oP 'VER_HOTFIX_VERSION\s+\K\d+' "$RH" | head -1)
+            fi
             echo "ver=v${MAJ}.${MIN}.${HOT}" >> "$GITHUB_OUTPUT"
           else
             echo "ver=" >> "$GITHUB_OUTPUT"
@@ -149,11 +160,21 @@ jobs:
           elif [ "$TYPE" = "release" ] && [ -n "$VER" ]; then
             TAG="$VER"
           else
-            # auto：上游有正式版且本仓库没发过 -> 正式版，否则 nightly
-            STABLE=$(gh api repos/optiscaler/OptiScaler/releases/latest --jq '.tag_name' 2>/dev/null || echo "")
-            if [ -n "$VER" ] && [ "$VER" = "$STABLE" ] && \
-               ! gh release view "$VER" --repo "${{ github.repository }}" >/dev/null 2>&1; then
-              TAG="$VER"; TYPE="release"
+            # auto：上游 fork 发过 $VER 对应的正式版 tag、且本仓库还没发过
+            # -> 发正式版，否则 nightly。
+            # 必须查「上游 fork」的 releases，不是 optiscaler/OptiScaler ——
+            # 后者只是这个 fork 的底座，两者版本号不是一个序列（底座冻结在
+            # 0.7.7），拿它比对会让 auto 永远退化成 nightly。
+            UP_SLUG=$(printf '%s' "$UPSTREAM_REPO" | sed -E 's#^https://github.com/##; s#\.git$##')
+            UP_TAG=""
+            if [ -n "$VER" ]; then
+              UP_TAG=$(gh api "repos/$UP_SLUG/releases?per_page=50" \
+                         --jq '.[] | select(.draft == false) | .tag_name' 2>/dev/null \
+                       | grep -E "^${VER}([-.]|$)" | head -1 || true)
+            fi
+            if [ -n "$UP_TAG" ] && \
+               ! gh release view "$UP_TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+              TAG="$UP_TAG"; TYPE="release"
             else
               TAG="nightly-$DATE"; TYPE="nightly"
             fi
@@ -289,11 +310,14 @@ jobs:
           fi
 
           if [ "$RTYPE" = "release" ]; then
-            TITLE="Release $TAG"
+            TITLE="$TAG 简体中文版"
             NOTES="对应上游 $TAG 的简体中文版"
             PRE=false
           else
-            TITLE="Nightly $TAG"
+            # TAG 本身已经是 nightly-YYYYMMDD，再加 "Nightly " 前缀会渲染成
+            # "Nightly nightly-20260930"。GitHub 对 prerelease 本来就会挂
+            # Pre-release 徽章，标题直接给 tag 就行。
+            TITLE="$TAG"
             NOTES="每日自动构建：上游最新源码 + 简体中文汉化"
             PRE=true
           fi
