@@ -55,7 +55,8 @@ dict/
   targets.json          字面量改写的作用范围（只碰 menu/ 和 dlssnr/）
   glossary.json         术语表 + 文风要求，喂给翻译模型
   accepted_diffs.json   与参考汉化版「已知且已接受」的差异，供 verify.py 摘除告警
-  untranslated.json     模型判定「不该翻」或拿不准的串，等人裁决（自动生成）
+  untranslated.json     判定「保持英文」的串，附理由（自动生成 + 人工补）。
+                        scan_strings.py 会把它算作已知，否则这些串每轮都会被重新扫出来
 overlay/
   OptiScaler/menu/font/ChineseGlyphRanges.h   CJK 字形范围表
   font/wqy-microhei.ttc                       文泉驿微米黑（内置 Hack 无汉字字形）
@@ -70,6 +71,7 @@ tools/                  一次性工具，平时不用跑
   extract_dict.py       从「上游原文 vs 参考汉化版」抽取词典
   build_structural.py   抽取结构性改动规则
   probe.py              查某个英文串在两侧的全部出现处，用于判定该不该翻
+  apply_new_strings.py  把一批新串/改写串一次性补进词典（人工译好后的落盘工具）
 .github/workflows/localize.yml
 .upstream-revision      基线：上次同步到的上游 SHA（自动生成）
 .upstream-files         上次同步放进工作区的上游文件清单（自动生成，gitignore）

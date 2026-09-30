@@ -84,6 +84,12 @@ def main():
     for f, m in ovr.items():
         if not f.startswith("_"):
             known |= set(m)
+    # untranslated.json 是「已判定保持英文」的清单。不把它算作已知的话，
+    # 这些串每轮都会被重新扫出来、重新送翻译、重新被判定保持英文 —— 纯噪声。
+    unt_path = os.path.join(DICT, "untranslated.json")
+    if os.path.exists(unt_path):
+        with io.open(unt_path, encoding="utf-8") as f:
+            known |= set(json.load(f))
 
     files = set()
     for g in cfg["globs"]:

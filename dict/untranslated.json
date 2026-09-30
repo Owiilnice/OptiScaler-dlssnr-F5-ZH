@@ -1,0 +1,80 @@
+{
+ "FGId: %llu, RfxId: %llu": {
+  "why": "帧生成内部句柄 ID，参考汉化版保持英文",
+  "seen_in": [
+   "OptiScaler/menu/menu_common.cpp"
+  ]
+ },
+ "FPS: %6.1f/%5.1f, Avg: %6.1f": {
+  "why": "FPS 叠加层的诊断读数，参考汉化版保持英文",
+  "seen_in": [
+   "OptiScaler/menu/menu_common.cpp"
+  ]
+ },
+ "FSR %s": {
+  "why": "FSR 版本标签（%s 是版本号），参考汉化版保持英文",
+  "seen_in": [
+   "OptiScaler/menu/menu_common.cpp"
+  ]
+ },
+ "FSR %s##%d": {
+  "why": "FSR 版本标签（%s 是版本号），参考汉化版保持英文",
+  "seen_in": [
+   "OptiScaler/menu/menu_common.cpp"
+  ]
+ },
+ "FSR 3.1 FG: %s": {
+  "why": "DLL 名 + 版本号，参考汉化版保持英文",
+  "seen_in": [
+   "OptiScaler/menu/menu_common.cpp"
+  ]
+ },
+ "FSR 3.1 SR: %s": {
+  "why": "DLL 名 + 版本号，参考汉化版保持英文",
+  "seen_in": [
+   "OptiScaler/menu/menu_common.cpp"
+  ]
+ },
+ "FSR 3.1: %s": {
+  "why": "DLL 名 + 版本号，参考汉化版保持英文",
+  "seen_in": [
+   "OptiScaler/menu/menu_common.cpp"
+  ]
+ },
+ "Splash": {
+  "why": "ImGui 窗口名，仅作内部 ID，界面不显示（该窗口无边框无标题）",
+  "seen_in": [
+   "OptiScaler/menu/menu_common.cpp"
+  ]
+ },
+ "Vulkan %s| %s %d.%d.%d%s": {
+  "why": "Vulkan 驱动版本行，参考汉化版保持英文",
+  "seen_in": [
+   "OptiScaler/menu/menu_common.cpp"
+  ]
+ },
+ "libxess: %s": {
+  "why": "DLL 名 + 版本号，参考汉化版保持英文",
+  "seen_in": [
+   "OptiScaler/menu/menu_common.cpp"
+  ]
+ },
+ "nvngx.dll: %s": {
+  "why": "DLL 名 + 版本号，参考汉化版保持英文",
+  "seen_in": [
+   "OptiScaler/menu/menu_common.cpp"
+  ]
+ },
+ "nvngx_dlss : %s": {
+  "why": "DLL 名 + 版本号，参考汉化版保持英文",
+  "seen_in": [
+   "OptiScaler/menu/menu_common.cpp"
+  ]
+ },
+ "nvngx_dlssd : %s": {
+  "why": "DLL 名 + 版本号，参考汉化版保持英文",
+  "seen_in": [
+   "OptiScaler/menu/menu_common.cpp"
+  ]
+ }
+}

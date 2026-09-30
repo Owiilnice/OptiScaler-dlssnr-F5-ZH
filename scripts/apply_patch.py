@@ -192,13 +192,39 @@ def apply_structural(text, rule, rep):
 
 # ---------------------------------------------------------------- 字面量改写
 
+_ZH2EN = None
+_ZH2EN_SRC = None
+
+
+def _reverse(gdict):
+    """译文 -> 原文（一对多）的反查表。用来认出手上这份源码里已经汉化过的字面量。
+
+    必须是一对多：词典里存在多个英文原文共用一个译文的条目
+    （Default/DEFAULT、Off/Close、Zoom/Scale 这类），用一对一映射会漏记。
+    """
+    global _ZH2EN, _ZH2EN_SRC
+    if _ZH2EN_SRC is not gdict:
+        _ZH2EN = {}
+        for en, zh in gdict.items():
+            _ZH2EN.setdefault(zh, []).append(en)
+        _ZH2EN_SRC = gdict
+    return _ZH2EN
+
+
 def rewrite_literals(text, rel, gdict, ovr, rep):
     edits = []
+    rev = _reverse(gdict)
     # "*" 是全局规则，文件级规则覆盖同名键
     file_ovr = dict(ovr.get("*", {}))
     file_ovr.update(ovr.get(rel, {}))
     for value, s, e in scan_groups(text):
         if has_cjk(value):
+            # 已经汉化的字面量反查词典记成「已应用」。不这么做的话，
+            # 对同一份源码重复跑一次，词典里上千条都会算成「未命中」，
+            # 把真正的「上游改了这个串」信号淹掉。
+            en = rev.get(value)
+            if en:
+                rep["applied_before"].update(en)
             continue
         line = line_of(text, s)
         if is_include_line(line, s - (text.rfind("\n", 0, s) + 1)):
@@ -267,7 +293,8 @@ def main():
     cfg = json.load(io.open(os.path.join(DICT, "targets.json"), encoding="utf-8"))
 
     rep = {"applied": [], "skipped": [], "failed": [], "override_hits": [],
-           "override_keys": set(), "dict_hits": {}, "literal_files": {}, "overlay": []}
+           "override_keys": set(), "dict_hits": {}, "literal_files": {}, "overlay": [],
+           "applied_before": set()}
 
     # 1) 结构规则
     by_file = {}
@@ -308,16 +335,20 @@ def main():
     # 4) 统计：词典里哪些条目一次都没命中
     #    被 overrides 接管的条目（Auto / yes / no / Balanced / Neural Rendering 这类
     #    上下文相关的串）也算命中 —— 它们只是没走全局词典这条路。
-    used = set(rep["dict_hits"]) | set(rep["override_keys"])
+    #    已汉化过的字面量（重复运行时）同样算命中，见 rewrite_literals。
+    used = set(rep["dict_hits"]) | set(rep["override_keys"]) | set(rep["applied_before"])
     unused = sorted(set(gdict) - used)
     rep["unused_dict_entries"] = unused
     rep["override_keys"] = sorted(rep["override_keys"])
+    rep["applied_before"] = sorted(rep["applied_before"])
 
     total_lit = sum(rep["literal_files"].values())
     print(f"目标文件 {len(targets)} 个，字面量替换 {total_lit} 处")
     print(f"结构规则：应用 {len(rep['applied'])}，已存在跳过 {len(rep['skipped'])}，失败 {len(rep['failed'])}")
     print(f"覆盖文件 {len(rep['overlay'])} 个")
     print(f"词典 {len(gdict)} 条，命中 {len(used & set(gdict))}，未命中 {len(unused)} 条")
+    if rep["applied_before"]:
+        print(f"  （其中 {len(rep['applied_before'])} 条是这份源码里已经汉化过的字面量，重复运行时正常）")
     if unused:
         print("  未命中前 10 条（上游可能已删除该串）:")
         for u in unused[:10]:
