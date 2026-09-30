@@ -23,7 +23,9 @@
 #                      编译必须要有，预检/扫描不需要 —— 拉一次几分钟，别白花。
 
 set -euo pipefail
-trap 'echo "!! sync_upstream 在第 $LINENO 行失败" >&2; exit 3' ERR
+# 出错时报出「哪一行、哪条命令」。GitHub Actions 的 job 日志要仓库管理员权限
+# 才能下载，但 ::error:: 注解是公开可读的 —— 出问题时这是唯一能拿到的线索。
+trap 'echo "::error::sync_upstream 失败：第 $LINENO 行，命令: $BASH_COMMAND"; echo "!! sync_upstream 在第 $LINENO 行失败: $BASH_COMMAND" >&2; exit 3' ERR
 
 UPSTREAM_URL="${1:?用法: sync_upstream.sh <上游仓库URL> <上游分支> [SHA]}"
 UPSTREAM_BRANCH="${2:?缺上游分支名}"
@@ -190,7 +192,24 @@ PY
 #      清掉，之后再想 git submodule update 就没有对象了。
 if [ "$WANT_SUBMODULES" = "1" ] && [ -f .gitmodules ]; then
   echo "初始化上游子模块（深度 1）..."
-  git submodule update --init --recursive --depth 1 --jobs 4
+  # 顺序拉，不加 --jobs：并行 submodule update 在 Windows runner 上会因为
+  # .git/modules 下的文件锁互相打架而偶发失败。
+  # 失败时把日志尾巴塞进 ::error:: 注解，否则 job 日志拿不到就完全抓瞎。
+  try_submodules() {
+    git submodule update --init --recursive --depth 1 2>&1 | tee .submodule.log
+    return "${PIPESTATUS[0]}"
+  }
+  if ! try_submodules; then
+    echo "子模块拉取失败，重试一次..."
+    if ! try_submodules; then
+      tail -n 12 .submodule.log | while IFS= read -r l; do
+        [ -n "$l" ] && echo "::error::子模块: $l"
+      done
+      echo "::error::上游子模块初始化失败（日志见上）"
+      exit 3
+    fi
+  fi
+  rm -f .submodule.log
   echo "子模块就绪: $(git config -f .gitmodules --get-regexp '^submodule\..*\.path$' | wc -l) 个"
 elif [ -f .gitmodules ]; then
   echo "跳过子模块（要编译的话设 SYNC_SUBMODULES=1）"
