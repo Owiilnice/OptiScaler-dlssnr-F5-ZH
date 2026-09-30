@@ -22,3 +22,7 @@ pending.md
 precheck.log
 apply-report.json
 tools/_*
+
+# python 缓存。CI 里跑 apply_patch.py 会生成，不忽略就会被 git add -A 带进仓库
+__pycache__/
+*.pyc

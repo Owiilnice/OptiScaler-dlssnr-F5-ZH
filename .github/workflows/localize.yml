@@ -117,7 +117,9 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dict overlay scripts tools .github README-ZH.md .upstream-revision
+          # -A 必需：sync_upstream.sh 会删掉误入资产目录的上游文件，
+          # 光用 `git add <path>` 不一定把删除记全。
+          git add -A -- dict overlay scripts tools .github README-ZH.md .upstream-revision
           if git diff --cached --quiet; then
             echo "资产无变更"
           else

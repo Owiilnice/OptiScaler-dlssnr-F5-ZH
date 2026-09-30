@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 把上游源码同步进工作区，同时保证汉化资产不被覆盖。
+# 把上游源码同步进工作区，同时保证汉化资产不被覆盖、不被污染。
 #
 # 核心约定：上游源码**不进本仓库的版本库**。
 #   本仓库只跟踪汉化资产（dict/ overlay/ scripts/ tools/ .github/ README-ZH.md）。
@@ -71,35 +71,74 @@ fi
 # 2) 整棵覆盖上游源码到工作区（KEEP 里的路径不动）
 git checkout "$HEAD_SHA" -- . "${KEEP[@]}"
 
-# 3) 删掉上游已删除、工作区还留着的文件。
-#    不做这步，上游删掉一个源文件后构建会因为残留文件而失败。
+# 3) 清理。
+#
+#    这一步必须同时处理两件事，缺一件就会出问题：
+#      a) 上游删掉的源文件，工作区还留着 → 编译时残留旧文件，或链到已删除的符号。
+#      b) 上游**有**、但落在 KEEP 目录里的文件（典型：.github/ISSUE_TEMPLATE、
+#         .github/workflows/build.yml）→ 第 2 步的 pathspec 把它们排除在覆盖之外，
+#         于是它们既不被上游版本覆盖，也不会被 (a) 判定为「上游已移除」，
+#         永久残留在工作区，下一次提交就被带进仓库。
+#
+#    判据：KEEP 目录是**我们的地盘**，里面的东西只认本仓库跟踪的文件 + 本地新增的
+#    非忽略文件；其余一律视为上游误入，删除。
 "$PY" - "$HEAD_SHA" <<'PY'
 import os, subprocess, sys
 
 sha = sys.argv[1]
-# 必须用 -z：不加的话 git 会给含空格/非 ASCII 的路径套上双引号并转义，
-# 于是 "docs/DLSS-NR Enlarge Paths.html" 匹配不上工作区里的裸路径，
-# 被误判成「上游已删除」而删掉 —— 上游确实有这种带空格的文件。
-raw = subprocess.run(["git", "ls-tree", "-r", "-z", "--name-only", sha],
+
+def ls_tree(args):
+    # 必须用 -z：不加的话 git 会给含空格/非 ASCII 的路径套上双引号并转义，
+    # 于是 "docs/DLSS-NR Enlarge Paths.html" 匹配不上工作区里的裸路径，
+    # 被误判成「上游已删除」而删掉 —— 上游确实有这种带空格的文件。
+    raw = subprocess.run(["git", "ls-tree", "-r", "-z", "--name-only"] + args,
+                         capture_output=True, check=True).stdout
+    return {p.decode("utf-8", "surrogateescape") for p in raw.split(b"\0") if p}
+
+# 上游那棵树
+up = ls_tree([sha])
+
+# 我们自己的地盘：这些目录/文件里只认本仓库的东西，上游的一概不要
+OWNED_DIRS = (".github/", "dict/", "overlay/", "scripts/", "tools/")
+OWNED_FILES = {"README-ZH.md", ".gitattributes", ".gitignore", ".upstream-revision"}
+
+ours = set()
+# 已跟踪的资产
+try:
+    raw = subprocess.run(["git", "ls-tree", "-r", "-z", "--name-only", "HEAD"],
+                         capture_output=True, check=True).stdout
+    ours |= {p.decode("utf-8", "surrogateescape") for p in raw.split(b"\0") if p}
+except subprocess.CalledProcessError:
+    pass  # 首次运行还没有 HEAD
+# 本地新增、尚未提交但也没被忽略的文件（正在写的词典/脚本，不能删）
+raw = subprocess.run(["git", "ls-files", "--others", "--exclude-standard", "-z"],
                      capture_output=True, check=True).stdout
-up = {p.decode("utf-8", "surrogateescape") for p in raw.split(b"\0") if p}
-# 本仓库自己的东西，永远不删
-keep = (".github/", "overlay/", "scripts/", "dict/", "tools/", "README-ZH.md",
-        ".gitattributes", ".gitignore", ".upstream-revision")
+ours |= {p.decode("utf-8", "surrogateescape") for p in raw.split(b"\0") if p}
+
+def owned(p):
+    return p in OWNED_FILES or p.startswith(OWNED_DIRS)
+
 stale = []
 for root, dirs, files in os.walk("."):
     dirs[:] = [d for d in dirs if d not in (".git", "dist")]
     for f in files:
         p = os.path.relpath(os.path.join(root, f), ".").replace("\\", "/")
-        if p in keep or p.startswith(keep):
+        if p in ours:
+            continue                      # 我们的资产
+        if owned(p):
+            stale.append(p)               # 我们的地盘里的外来文件
             continue
         if p not in up:
-            stale.append(p)
+            stale.append(p)               # 上游已移除
+
 if stale:
-    print(f"删除上游已移除的 {len(stale)} 个文件:")
+    print(f"清理 {len(stale)} 个文件:")
     for p in sorted(stale)[:20]:
         print(f"    {p}")
-    subprocess.run(["git", "rm", "-q", "-f", "--cached", "--ignore-unmatch", "--"] + stale, check=False)
+    if len(stale) > 20:
+        print(f"    ... 另有 {len(stale) - 20} 个")
+    subprocess.run(["git", "rm", "-q", "-f", "--cached", "--ignore-unmatch", "--"] + stale,
+                   check=False)
     for p in stale:
         try:
             os.remove(p)
@@ -118,10 +157,11 @@ PY
 # 5) 只把汉化资产放进暂存区。
 #    git checkout <tree> -- <paths> 会同时改索引，所以先 reset 把上游源码摘出去，
 #    否则一次 CI 就会把整个上游源码树提交进仓库 —— 那就退化回 merge 冲突的老路了。
+#    -A 是必需的：第 3 步删掉的残留文件（可能是本仓库曾误提交过的）也要把删除入账。
 if git rev-parse --verify HEAD >/dev/null 2>&1; then
   git reset -q
 fi
-git add -- "${ASSETS[@]}" 2>/dev/null || true
+git add -A -- "${ASSETS[@]}" 2>/dev/null || true
 
 if [ -n "$PREV_SHA" ] && [ "$PREV_SHA" = "$HEAD_SHA" ]; then
   echo "上游无变化（$HEAD_SHA）"
