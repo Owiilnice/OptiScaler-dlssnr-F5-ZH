@@ -45,6 +45,22 @@
 | CI 报「结构锚点未命中」 | Actions 日志里的 `precheck` 步骤 | 按日志给的 rule id 改 `dict/structural.json` |
 | `dict/untranslated.json` 攒了条目 | 该文件 | 该翻的补进 `strings.json`，该保持英文的补进 `overrides.json` |
 
+## 发布规则
+
+`workflow_dispatch` 的 `release_type` 默认 `auto`：
+
+- **正式版** —— 上游 fork 发了新正式版 tag，且本仓库还没发过 → tag 直接用上游那个
+  完整 tag（如 `v0.1.24-colour-encoding-and-tune-fixes`），标题 `$TAG 简体中文版`
+- **nightly** —— 其余情况发当日 `nightly-YYYYMMDD`，标记为 pre-release；
+  同日重复触发自动加 `-2` / `-3` 后缀
+
+判定用的是 `NR_RELEASE_MAJOR/MINOR/HOTFIX_VERSION` —— 这是**这个 fork 自己的发布号**。
+同一个文件里的 `VER_MAJOR/MINOR/HOTFIX_VERSION` 是**冻结的上游同步标记**（长期停在
+`0.7.7`，还被 XeSS/FSR 包装层拿去对游戏伪装引擎版本），拿它当版本号会永远算错。
+老版本没有 `NR_RELEASE_*` 时才回退到 `VER_*`。
+
+**正式版绝不覆盖**：同 tag 的 Release 已存在时直接报错退出，不会静默覆盖已发布的包。
+
 ## 目录结构
 
 ```
