@@ -100,7 +100,26 @@ def scan_groups(text):
 
 
 def has_cjk(s):
-    return any("\u4e00" <= ch <= "\u9fff" for ch in s)
+    """判断一个字面量是不是已经是中文。
+
+    不能只查 CJK 表意文字（U+4E00..U+9FFF）：中文全角标点落在 U+3000..U+303F
+    和 U+FF00..U+FFEF，只看汉字的话「（DXVK） 」这种「全角标点 + 拉丁字母」的串
+    会被当成英文，每轮都被重新报成待翻译。
+
+    全角区里要排掉全角字母数字（Ａ-Ｚ ０-９ ａ-ｚ）—— 它们只是字宽变体，
+    不构成「已经是中文」的证据。
+    """
+    for ch in s:
+        o = ord(ch)
+        if 0x4E00 <= o <= 0x9FFF:      # 汉字
+            return True
+        if 0x3000 <= o <= 0x303F:      # 中文标点 、。《》「」
+            return True
+        if 0xFF00 <= o <= 0xFFEF:
+            if 0xFF10 <= o <= 0xFF19 or 0xFF21 <= o <= 0xFF3A or 0xFF41 <= o <= 0xFF5A:
+                continue               # 全角字母数字，不算
+            return True
+    return False
 
 
 def line_of(text, pos):
