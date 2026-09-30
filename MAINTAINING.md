@@ -1,4 +1,6 @@
-# OptiScaler-F5-DLSSNR-Multipass 简体中文汉化（可持续维护版）
+# 维护说明
+
+> 面向**维护这个汉化仓库的人**。想装这个 mod 的普通用户请回到 [README.md](README.md)。
 
 上游 [janblade/OptiScaler-F5-DLSSNR-Multipass](https://github.com/janblade/OptiScaler-F5-DLSSNR-Multipass)
 更新很勤。这个仓库解决的是**「每次上游更新，汉化就得重做一遍」**的问题。

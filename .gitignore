@@ -4,13 +4,18 @@
 # 这里用白名单写法（先全禁，再逐个放行）而不是逐条忽略上游路径：
 # 上游有 1000+ 个文件、几十个目录，逐条忽略根本维护不过来，
 # 而且上游新增目录时会漏 —— 漏一次就是 100MB 源码混进提交。
+#
+# 注意：白名单是**穷举**的。新增一个根目录下的资产文件（比如 README.md），
+# 光加进 sync_upstream.sh 的 ASSETS 还不够 —— 不在下面放行，git 会静默忽略它，
+# CI 里的 `git add -A -- <路径>` 就什么也加不进去，而且不会报错。
 /*
 !/.github/
 !/dict/
 !/overlay/
 !/scripts/
 !/tools/
-!/README-ZH.md
+!/README.md
+!/MAINTAINING.md
 !/.gitattributes
 !/.gitignore
 !/.upstream-revision

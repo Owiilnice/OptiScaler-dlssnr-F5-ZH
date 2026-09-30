@@ -4,7 +4,7 @@ name: 汉化同步与发布
 # 这条流水线把「跟上游」变成自动的：
 #   取上游源码 -> 重放汉化层 -> 扫出新串 -> 自动翻译 -> 云端编译 -> 发 Release
 #
-# 本仓库只跟踪汉化资产（dict/ overlay/ scripts/ tools/ .github/ README-ZH.md），
+# 本仓库只跟踪汉化资产（dict/ overlay/ scripts/ tools/ .github/ README.md MAINTAINING.md），
 # 上游源码每次现取现用，不提交。所以汉化和上游之间不存在 merge 冲突。
 #
 # 人工只在两种情况需要介入：
@@ -143,7 +143,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # -A 必需：sync_upstream.sh 会删掉误入资产目录的上游文件，
           # 光用 `git add <path>` 不一定把删除记全。
-          git add -A -- dict overlay scripts tools .github README-ZH.md .upstream-revision
+          git add -A -- dict overlay scripts tools .github README.md MAINTAINING.md .upstream-revision
           if git diff --cached --quiet; then
             echo "资产无变更"
           else

@@ -79,18 +79,24 @@ run_py() {   # run_py <说明> [python 参数...]
 # 本仓库自己的资产，绝不允许被上游覆盖。
 # .gitignore / .gitattributes 也在这里：它们会直接影响 git 对「哪些文件算我们的资产」的判断，
 # 让上游的版本盖过来风险太大（上游 .gitignore 里任何一条命中 dict/ scripts/ 就静默丢资产）。
+#
+# README.md 是个特例：上游**也有**同名文件，所以必须显式排除，否则每次同步都会被
+# 上游那份英文 README 盖掉 —— 而我们要的是自己那份用户面向的中文说明
+# （GitHub 会把根目录的 README.md 渲染成仓库首页）。维护文档另放 MAINTAINING.md，
+# 那个名字上游没有，天然安全。
 KEEP=(
   ":(exclude).github"
   ":(exclude)overlay"
   ":(exclude)scripts"
   ":(exclude)dict"
   ":(exclude)tools"
-  ":(exclude)README-ZH.md"
+  ":(exclude)README.md"
+  ":(exclude)MAINTAINING.md"
   ":(exclude).gitignore"
   ":(exclude).gitattributes"
   ":(exclude).upstream-files"
 )
-ASSETS=(dict overlay scripts tools .github README-ZH.md .gitattributes .gitignore .upstream-revision)
+ASSETS=(dict overlay scripts tools .github README.md MAINTAINING.md .gitattributes .gitignore .upstream-revision)
 
 PREV_SHA=""
 if [ -f .upstream-revision ]; then
@@ -161,10 +167,15 @@ def in_submodule(p):
 
 # 我们自己的地盘。.github/ 只认白名单里那一个文件，其余一律不认。
 OURS_EXACT = {
-    "README-ZH.md", ".gitattributes", ".gitignore", ".upstream-revision",
-    ".github/workflows/localize.yml",
+    "README.md", "MAINTAINING.md", ".gitattributes", ".gitignore",
+    ".upstream-revision", ".github/workflows/localize.yml",
 }
 OURS_DIRS = ("dict/", "overlay/", "scripts/", "tools/")
+
+def is_ours(p):
+    if p in OURS_EXACT:
+        return True
+    return any(p.startswith(d) for d in OURS_DIRS)
 
 prev = None
 if os.path.isfile(".upstream-files"):
@@ -174,10 +185,16 @@ if os.path.isfile(".upstream-files"):
 stale = []
 
 # a) 上游已移除
+#
+#    必须同时排掉「我们自己的文件」。README.md 就是个反例：上游有这个文件，
+#    但它被 KEEP 排除、工作区里躺的是我们那份，于是它既进了 .upstream-files
+#    又不在上游 tree 里 —— 一旦上游哪天删掉 README.md，这里就会把我们的
+#    资产当成「上游残留」删掉。凡是我们自己的名字，一律不碰。
 if prev is None:
     print("没有 .upstream-files（首次运行），跳过「上游已移除」清理")
 else:
-    stale.extend(sorted(p for p in prev - up if not in_submodule(p)))
+    stale.extend(sorted(p for p in prev - up
+                        if not in_submodule(p) and not is_ours(p)))
 
 # b) .github/ 里的上游文件
 for root, dirs, files in os.walk(".github"):
