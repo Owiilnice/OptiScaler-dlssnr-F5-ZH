@@ -164,13 +164,17 @@ else:
     print("无上游残留文件")
 PY
 
-# 4) 记录基线 + 本次放进工作区的上游文件清单
-{
-  echo "commit=$HEAD_SHA"
-  echo "upstream=$UPSTREAM_URL"
-  echo "branch=$UPSTREAM_BRANCH"
-  echo "synced_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-} > .upstream-revision
+# 4) 记录基线 + 本次放进工作区的上游文件清单。
+#    SHA 没变就不重写：synced_at 每次都变，会让 CI 在「什么都没变」的日子里
+#    也产生一个只有时间戳的空提交。
+if [ "$PREV_SHA" != "$HEAD_SHA" ] || [ ! -f .upstream-revision ]; then
+  {
+    echo "commit=$HEAD_SHA"
+    echo "upstream=$UPSTREAM_URL"
+    echo "branch=$UPSTREAM_BRANCH"
+    echo "synced_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  } > .upstream-revision
+fi
 
 # 清单只记「真的落在工作区」的文件，下次靠它算差集
 git ls-tree -r -z --name-only "$HEAD_SHA" | "$PY" -c '
