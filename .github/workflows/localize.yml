@@ -321,7 +321,7 @@ jobs:
             # "Nightly nightly-20260930"。GitHub 对 prerelease 本来就会挂
             # Pre-release 徽章，标题直接给 tag 就行。
             TITLE="$TAG"
-            NOTES="每日自动构建：上游最新源码 + 简体中文汉化"
+            NOTES="按需构建：上游最新源码 + 简体中文汉化"
             PRE=true
           fi
           NOTES="$NOTES
