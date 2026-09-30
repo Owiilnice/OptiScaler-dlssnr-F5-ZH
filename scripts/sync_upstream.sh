@@ -15,12 +15,20 @@
 # 退出码:
 #   0 = 上游代码有变化（需要重新编译）
 #   1 = 上游代码与上次相同（可跳过）
+#   3 = 出错（网络、锚点、子模块……）。用独立的码是为了让调用方能区分
+#       「没变化」和「炸了」—— 两者都可能是 1，混在一起会把真错误吞掉。
+#
+# 环境变量:
+#   SYNC_SUBMODULES=1  同时初始化上游的 git 子模块（external/ 下 10 个）。
+#                      编译必须要有，预检/扫描不需要 —— 拉一次几分钟，别白花。
 
 set -euo pipefail
+trap 'echo "!! sync_upstream 在第 $LINENO 行失败" >&2; exit 3' ERR
 
 UPSTREAM_URL="${1:?用法: sync_upstream.sh <上游仓库URL> <上游分支> [SHA]}"
 UPSTREAM_BRANCH="${2:?缺上游分支名}"
 UPSTREAM_SHA="${3:-}"
+WANT_SUBMODULES="${SYNC_SUBMODULES:-0}"
 
 # ubuntu runner 上 python 可能只叫 python3，windows runner 上叫 python
 PY=""
@@ -88,7 +96,7 @@ git checkout "$HEAD_SHA" -- . "${KEEP[@]}"
 #       判据必须是「在上游 tree 里」而不是「git 跟踪的」—— 被误提交的上游文件
 #       同样是被跟踪的，用后者当判据等于什么都没判（第一版修复就栽在这里）。
 "$PY" - "$HEAD_SHA" <<'PY'
-import os, subprocess, sys
+import os, re, subprocess, sys
 
 sha = sys.argv[1]
 
@@ -101,6 +109,16 @@ def ls_tree(args):
     return {p.decode("utf-8", "surrogateescape") for p in raw.split(b"\0") if p}
 
 up = ls_tree([sha])
+
+# 子模块目录里的文件不在上游 tree 里（tree 里只有一个 gitlink 条目），
+# 所以下面的清理逻辑会把它们当成「上游已移除」删掉。必须显式放行。
+sub_paths = []
+if os.path.isfile(".gitmodules"):
+    with open(".gitmodules", encoding="utf-8", errors="replace") as f:
+        sub_paths = re.findall(r"^\s*path\s*=\s*(.+?)\s*$", f.read(), re.M)
+
+def in_submodule(p):
+    return any(p == sp or p.startswith(sp + "/") for sp in sub_paths)
 
 # 我们自己的地盘。.github/ 只认白名单里那一个文件，其余一律不认。
 OURS_EXACT = {
@@ -120,7 +138,7 @@ stale = []
 if prev is None:
     print("没有 .upstream-files（首次运行），跳过「上游已移除」清理")
 else:
-    stale.extend(sorted(prev - up))
+    stale.extend(sorted(p for p in prev - up if not in_submodule(p)))
 
 # b) .github/ 里的上游文件
 for root, dirs, files in os.walk(".github"):
@@ -163,6 +181,20 @@ if todo:
 else:
     print("无上游残留文件")
 PY
+
+# 3.5) 上游的 git 子模块（external/ 下 10 个：simpleini、spdlog、vulkan、
+#      FidelityFX-SDK、nvapi……）。第 2 步的 checkout 只会把 gitlink 写进索引，
+#      不会把内容拉下来 —— 缺一个都编译不过。
+#
+#      必须在这一步做，不能放到后面：第 5 步的 git reset 会把 gitlink 从索引里
+#      清掉，之后再想 git submodule update 就没有对象了。
+if [ "$WANT_SUBMODULES" = "1" ] && [ -f .gitmodules ]; then
+  echo "初始化上游子模块（深度 1）..."
+  git submodule update --init --recursive --depth 1 --jobs 4
+  echo "子模块就绪: $(git config -f .gitmodules --get-regexp '^submodule\..*\.path$' | wc -l) 个"
+elif [ -f .gitmodules ]; then
+  echo "跳过子模块（要编译的话设 SYNC_SUBMODULES=1）"
+fi
 
 # 4) 记录基线 + 本次放进工作区的上游文件清单。
 #    SHA 没变就不重写：synced_at 每次都变，会让 CI 在「什么都没变」的日子里

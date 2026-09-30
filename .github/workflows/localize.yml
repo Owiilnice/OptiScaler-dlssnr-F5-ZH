@@ -63,6 +63,11 @@ jobs:
           bash scripts/sync_upstream.sh "$UPSTREAM_REPO" "$UPSTREAM_BRANCH"
           CODE=$?
           set -e
+          # 0=有变化，1=无变化，>=2 才是真出错
+          if [ "$CODE" -ge 2 ]; then
+            echo "::error::同步上游失败（退出码 $CODE）"
+            exit 1
+          fi
           SHA=$(grep -m1 '^commit=' .upstream-revision | cut -d= -f2)
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           if [ $CODE -eq 0 ]; then
@@ -188,13 +193,26 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          submodules: 'true'
 
-      - name: 取上游源码（按预检时的 SHA）
+      - name: 取上游源码与子模块（按预检时的 SHA）
         shell: bash
+        env:
+          # 编译必须要有 external/ 下的 10 个 git 子模块（simpleini、spdlog、
+          # vulkan、FidelityFX-SDK、nvapi……）。checkout 只写 gitlink，不拉内容。
+          SYNC_SUBMODULES: '1'
         run: |
           # 按 SHA 取，保证「编译的代码」和「预检通过的代码」是同一份
-          bash scripts/sync_upstream.sh "$UPSTREAM_REPO" "$UPSTREAM_BRANCH" "${{ needs.sync.outputs.sha }}" || true
+          set +e
+          bash scripts/sync_upstream.sh "$UPSTREAM_REPO" "$UPSTREAM_BRANCH" "${{ needs.sync.outputs.sha }}"
+          CODE=$?
+          set -e
+          # 0=有变化，1=无变化，>=2 才是真出错。以前这里写 `|| true`，
+          # 把错误和「无变化」一起吞了：子模块没拉下来也照样往下走，
+          # 最后红在 MSBuild 上，日志里看不出根因。
+          if [ "$CODE" -ge 2 ]; then
+            echo "::error::同步上游失败（退出码 $CODE）"
+            exit 1
+          fi
 
       - name: 重放汉化层
         shell: bash

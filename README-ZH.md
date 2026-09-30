@@ -80,8 +80,9 @@ tools/                  一次性工具，平时不用跑
 ## 本地跑一遍
 
 ```bash
-# 1. 同步上游
-bash scripts/sync_upstream.sh https://github.com/janblade/OptiScaler-F5-DLSSNR-Multipass.git main
+# 1. 同步上游（预检/扫描够用；要编译就加 SYNC_SUBMODULES=1，
+#    否则 external/ 下的 10 个 git 子模块是空的，MSBuild 必失败）
+SYNC_SUBMODULES=1 bash scripts/sync_upstream.sh https://github.com/janblade/OptiScaler-F5-DLSSNR-Multipass.git main
 
 # 2. 重放汉化（--check 只检测不写盘）
 python scripts/apply_patch.py . --check
@@ -127,6 +128,16 @@ python scripts/verify.py <重放后的源码树> <参考汉化版源码树>
 一起删掉。也正因为判据是「在上游 tree 里」而不是「git 跟踪的」，被误提交的上游
 文件才拦得住：误提交的文件同样是被跟踪的。
 
+**为什么要单独管 git 子模块**
+上游有 10 个 git 子模块（`external/simpleini`、`spdlog`、`vulkan`、
+`FidelityFX-SDK`、`nvapi`……）。`git checkout <tree> -- .` 只会把 gitlink
+写进索引，**不会**把内容拉下来 —— 缺一个都编译不过。所以编译前要
+`SYNC_SUBMODULES=1`，脚本会在 `git reset` 之前跑 `git submodule update --init
+--recursive --depth 1`（必须在 reset 之前：reset 会把 gitlink 从索引里清掉，
+之后就找不到要拉哪个 commit 了）。
+
+预检和扫描不需要子模块，所以那两步不开这个开关，省几分钟。
+
 ## 已知的取舍
 
 - `scan_strings.py` 会漏报「单个词」的界面标签（如 `Upscaler`），换取的是不把 DLL 名、
@@ -136,5 +147,8 @@ python scripts/verify.py <重放后的源码树> <参考汉化版源码树>
 - `sync_upstream.sh` 同步后不会自动处理上游的 rebase / force-push；
   基线记录在 `.upstream-revision` 里，出问题可以对着查。
 - 首次运行时没有 `.upstream-files`，脚本会跳过「上游已移除」清理（正常，无副作用）。
+- `sync_upstream.sh` 的退出码：0=有变化、1=无变化、3=出错。CI 里必须区分
+  后两者——早期用 `|| true` 把错误和「无变化」一起吞了，子模块没拉下来也照样
+  往下走，最后红在 MSBuild 上，日志里看不出根因。
 - 本仓库的 git 历史里还留着早期 fork 带进来的上游源码。不影响使用，
   但仓库体积偏大；真要清得用 `filter-repo` 重写历史 + force push，代价是丢掉 fork 关系。
