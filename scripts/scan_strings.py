@@ -33,7 +33,7 @@ DICT = os.path.join(ROOT, "dict")
 # 出现在这些调用里的字面量是给人看的
 UI_CALLS = re.compile(
     r"\b(?:ImGui::(?:Text|TextWrapped|TextDisabled|TextColored|TextUnformatted|Button|SmallButton|Checkbox|"
-    r"Selectable|MenuItem|RadioButton|BeginCombo|CollapsingHeader|SliderFloat|SliderInt|InputText|InputFloat|"
+    r"Selectable|MenuItem|RadioButton|Combo|BeginCombo|CollapsingHeader|SliderFloat|SliderInt|InputText|InputFloat|"
     r"BeginTabItem|Begin|BeginChild|PushID|TreeNode|TreeNodeEx|LabelText|BulletText)"
     r"|ShowHelpMarker|HelpMarker|ScopedCollapsingHeader|Fail|Toast|Keybind|StrFmt|AddResourceBarrier"
     r"|AddDLSS\w*|AddFSR\w*|AddXe\w*|AddOpti\w*|setTitle|setContent)\b"
@@ -56,9 +56,20 @@ BARE_WORD_OK = re.compile(r"^[A-Z][a-z]{2,}$")
 
 
 def looks_like_ui(value):
-    if NOT_UI_VALUE.search(value):
+    """判断这个字面量像不像「给用户看的文案」。
+
+    先剥掉 ##xxx 控件 ID 后缀，只看 ## 前面的显示部分。
+    不剥的话，"Delete##" / "Cancel##tune" / "Apply##tune" 这类单词按钮会被
+    「无空格、无冒号、也不是首字母大写的单词」这条判据当成非文案丢掉 ——
+    它们恰恰是最典型的按钮文字。上游 v0.1.26 新增的调优/测量面板就栽在这里：
+    8 个按钮标签全程没被扫出来，界面上一直是英文。
+    """
+    display = value.split("##", 1)[0]
+    if not display:
+        return False          # "##id" 形式：没有显示文字，纯内部 ID
+    if NOT_UI_VALUE.search(display):
         return False
-    if " " not in value and ":" not in value and not BARE_WORD_OK.match(value):
+    if " " not in display and ":" not in display and not BARE_WORD_OK.match(display):
         return False
     return True
 

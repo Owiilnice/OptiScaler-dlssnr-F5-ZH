@@ -52,5 +52,14 @@
   "anchor": "Copy-Item -LiteralPath \"$root\\docs\" -Destination \"$stage\\docs\" -Recurse -Force",
   "after": "\n# Simplified Chinese localization: the bundled CJK font. OptiScaler looks for it at\n# <game>\\font\\wqy-microhei.ttc (next to the DLL) when the UI is Chinese.\nCopy-Item -LiteralPath \"$root\\font\" -Destination \"$stage\\font\" -Recurse -Force",
   "marker": "$stage\\font"
+ },
+ {
+  "id": "version_check_repo_url",
+  "file": "OptiScaler/version_check.cpp",
+  "desc": "更新检查指向本汉化仓库，而不是上游 fork。上游那份查的是 janblade/OptiScaler-F5-DLSSNR-Multipass，用户点「打开发布页面」拿到的是英文原版 —— 对汉化版用户毫无用处。换成我们的仓库后，我们一发新汉化包，老用户开游戏就会收到提示，点链接直达中文下载页。",
+  "mode": "replace_all",
+  "before": "/repos/janblade/OptiScaler-F5-DLSSNR-Multipass/releases/latest",
+  "after": "/repos/Owiilnice/OptiScaler-dlssnr-F5-ZH/releases/latest",
+  "marker": "Owiilnice/OptiScaler-dlssnr-F5-ZH"
  }
 ]
