@@ -40,7 +40,12 @@ permissions:
 
 env:
   UPSTREAM_REPO: https://github.com/janblade/OptiScaler-F5-DLSSNR-Multipass.git
-  UPSTREAM_BRANCH: main
+  # 上游的发版习惯是「main 上开发完 -> 开 release/X.Y.Z 分支 -> 在那上面打包发版」，
+  # main 因此长期停在某个旧版上（实测 2026-10-10：main = 0.1.27.2，而最新正式版
+  # v0.1.28 发在 release/0.1.28）。写死 main 会一直发出旧版。
+  # 留空 = 自动解析上游最新正式版 release 对应的 release/ 分支，解析失败回退 main。
+  # 要锁定某个分支，直接在这里填分支名即可（如 release/0.1.28）。
+  UPSTREAM_BRANCH: ""
   # 所有脚本的诊断输出都是中文。Windows runner 的默认输出编码是 cp1252，
   # 不加这个的话 python 一 print 中文就 UnicodeEncodeError 退出 ——
   # 编译任务（windows）红、同步任务（ubuntu）正常，根因就在这里。
@@ -58,17 +63,49 @@ jobs:
       tag: ${{ steps.ver.outputs.tag }}
       rtype: ${{ steps.ver.outputs.rtype }}
       sha: ${{ steps.sync_up.outputs.sha }}
+      branch: ${{ steps.upbranch.outputs.branch }}
       build_required: ${{ steps.check.outputs.required }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: 解析上游分支
+        id: upbranch
+        run: |
+          set -e
+          if [ -n "$UPSTREAM_BRANCH" ]; then
+            BR="$UPSTREAM_BRANCH"
+            echo "分支已显式锁定：$BR"
+          else
+            UP_SLUG=$(printf '%s' "$UPSTREAM_REPO" | sed -E 's#^https://github.com/##; s#\.git$##')
+            # 取上游最新正式版（非 draft / 非 prerelease）的 tag，形如 v0.1.28。
+            TAG=$(gh api "repos/$UP_SLUG/releases?per_page=30" \
+                    --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name' \
+                    2>/dev/null | head -1 || true)
+            BR=""
+            if [ -n "$TAG" ]; then
+              # 上游按 tag 开同名分支：v0.1.28 -> release/0.1.28
+              CAND="release/${TAG#v}"
+              if git ls-remote --exit-code --heads "$UPSTREAM_REPO" "$CAND" >/dev/null 2>&1; then
+                BR="$CAND"
+                echo "上游最新正式版 $TAG -> 分支 $BR"
+              fi
+            fi
+            if [ -z "$BR" ]; then
+              BR="main"
+              echo "::warning::未能解析上游 release 分支（最新 tag=$TAG），回退 main"
+            fi
+          fi
+          echo "branch=$BR" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: 取上游源码
         id: sync_up
         run: |
           set +e
-          bash scripts/sync_upstream.sh "$UPSTREAM_REPO" "$UPSTREAM_BRANCH"
+          bash scripts/sync_upstream.sh "$UPSTREAM_REPO" "${{ steps.upbranch.outputs.branch }}"
           CODE=$?
           set -e
           # 0=有变化，1=无变化，>=2 才是真出错
@@ -232,7 +269,7 @@ jobs:
         run: |
           # 按 SHA 取，保证「编译的代码」和「预检通过的代码」是同一份
           set +e
-          bash scripts/sync_upstream.sh "$UPSTREAM_REPO" "$UPSTREAM_BRANCH" "${{ needs.sync.outputs.sha }}"
+          bash scripts/sync_upstream.sh "$UPSTREAM_REPO" "${{ needs.sync.outputs.branch }}" "${{ needs.sync.outputs.sha }}"
           CODE=$?
           set -e
           # 0=有变化，1=无变化，>=2 才是真出错。以前这里写 `|| true`，
