@@ -54,6 +54,138 @@ NOT_UI_VALUE = re.compile(
 #   "DXVK" / "nvngx" / "mv_resource" / "kNames" 这类不是，丢掉
 BARE_WORD_OK = re.compile(r"^[A-Z][a-z]{2,}$")
 
+# 下拉/枚举选项数组的声明行。ImGui::Combo(label, &v, names, N) 的第 3 个参数是个
+# 字符串数组，而这些数组**不在任何 ImGui 调用里**，光靠调用白名单整类扫不到 ——
+# 上游 0.1.26 的「测光/色彩编码/调试视图」，0.1.27 的 Bicubic/Lanczos/MAGIC/
+# Native look 全栽在这。这类数组长这样：
+#     static const char* dsNames[] = { "FSR1", "Bicubic", "Catmull-Rom", ... };
+#     static const char* const meterNames[] = { "Average", "Percentile (log)" };
+# 判定：一行里出现 char 指针数组声明，且初始化列表在当前行或后续若干行内闭合。
+# 名字后缀 Names/names 也认，但真正的判据是「有 char* 数组初始化」，避免误伤
+# 数字数组或设备名单。
+ARRAY_DECL = re.compile(
+    r"\b(?:static\s+)?(?:const\s+)?char\s*(?:const\s*)?\*\s*(?:const\s*)?"
+    r"([A-Za-z_]\w*)\s*\[\s*\]\s*=\s*\{"
+)
+
+# 值看起来像「给用户看的选项名」而不是资源路径 / ini 键 / 内部标识。
+# 数组里的项通常没有冒号也没有空格（"Bicubic" / "Linear HDR"），所以不能沿用
+# looks_like_ui 的「必须有空格或冒号或首字母大写」判据 —— 那个判据正是漏检主因。
+NOT_UI_ARRAY_VALUE = re.compile(r"(?:^##|^%|\\\\|/|\.(?:dll|ini|ttf|ttc|json|log|txt|hlsl|cube|exe|bin)$|^[0-9.]+$)")
+
+
+def ui_array_names(text):
+    """找出真正当作界面选项来源的 char* 数组名。
+
+    光看「是不是 char* 数组」不行：`kGroups`（内核分组名）、`states`
+    （D3D12 资源状态）、`kDevice`（Vulkan 扩展名）、`models` 都是内部枚举名，
+    翻了会破坏功能。判据收紧成：数组名出现在 Combo / BeginCombo / Selectable /
+    RadioButton 的参数里 —— 那才是「这些字符串会显示在界面上」的证据。
+    """
+    names = set()
+    for m in re.finditer(
+        r"\b(?:ImGui::)?(?:Combo|BeginCombo|Selectable|RadioButton)\s*\(", text
+    ):
+        # 取该调用的一对括号范围
+        depth = 0
+        i = text.find("(", m.start())
+        j = i
+        n = len(text)
+        while j < n:
+            if text[j] == "(":
+                depth += 1
+            elif text[j] == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        for ident in re.findall(r"\b([A-Za-z_]\w*)\b", text[i:j]):
+            names.add(ident)
+    return names
+
+
+def array_item_ok(value):
+    """数组项是否是「给人看的选项名」。"""
+    display = value.split("##", 1)[0]
+    if not display.strip():
+        return False
+    if NOT_UI_ARRAY_VALUE.search(display):
+        return False
+    # 必须含至少两个连续字母，排除纯数字/符号项
+    if not re.search(r"[A-Za-z]{2}", display):
+        return False
+    return True
+
+
+def find_array_groups(text):
+    """切出所有 char* 数组初始化列表里的字面量组。
+
+    返回 [(value, start, end, array_name)]。这些是 ImGui::Combo / RadioButton 的
+    选项来源，必须翻译才不会有「界面半中半英」。只有被界面调用引用的数组才算
+    （见 ui_array_names），内部枚举名不翻。
+    """
+    used = ui_array_names(text)
+    out = []
+    pos = 0
+    while True:
+        m = ARRAY_DECL.search(text, pos)
+        if not m:
+            break
+        name = m.group(1)
+        brace = text.find("{", m.end() - 1)
+        if brace < 0:
+            pos = m.end()
+            continue
+        # 找到与 { 配对的 }，越过嵌套的 {} 与字符串
+        depth = 0
+        i = brace
+        n = len(text)
+        while i < n:
+            c = text[i]
+            if c == '"':
+                i += 1
+                while i < n:
+                    if text[i] == "\\":
+                        i += 2
+                        continue
+                    if text[i] == '"':
+                        i += 1
+                        break
+                    i += 1
+                continue
+            if c == "'":
+                i += 1
+                while i < n:
+                    if text[i] == "\\":
+                        i += 2
+                        continue
+                    if text[i] == "'":
+                        i += 1
+                        break
+                    i += 1
+                continue
+            if c == "/" and i + 1 < n and text[i + 1] == "/":
+                j = text.find("\n", i)
+                i = n if j < 0 else j + 1
+                continue
+            if c == "/" and i + 1 < n and text[i + 1] == "*":
+                j = text.find("*/", i + 2)
+                i = n if j < 0 else j + 2
+                continue
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        body = text[brace:i]
+        if name in used:
+            for value, s, e in scan_groups(body):
+                out.append((value, brace + s, brace + e, name))
+        pos = i + 1
+    return out
+
 
 def looks_like_ui(value):
     """判断这个字面量像不像「给用户看的文案」。
@@ -130,6 +262,19 @@ def main():
                 continue
             line = text.count("\n", 0, s) + 1
             pending.append({"file": rel, "line": line, "call": call.group(0), "en": value})
+
+        # 选项数组单独走一路：它们不在任何 ImGui 调用里，UI_CALLS 白名单扫不到。
+        for value, s, e, aname in find_array_groups(text):
+            if has_cjk(value) or not value.strip():
+                continue
+            if value in known:
+                continue
+            if not array_item_ok(value):
+                continue
+            line = text.count("\n", 0, s) + 1
+            pending.append({"file": rel, "line": line, "call": f"array:{aname}", "en": value})
+
+    pending.sort(key=lambda p: (p["file"], p["line"]))
 
     with io.open(args.out, "w", encoding="utf-8", newline="\n") as f:
         json.dump(pending, f, ensure_ascii=False, indent=1)
