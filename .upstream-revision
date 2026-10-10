@@ -1,4 +1,4 @@
-commit=47fd3e97e7be3cd81a6dedd9a925aa236440aad4
+commit=8a2e510d6b0553fae2ecc5bec4c2fc4316c123d9
 upstream=https://github.com/janblade/OptiScaler-F5-DLSSNR-Multipass.git
-branch=main
-synced_at=2026-10-10T05:41:20Z
+branch=release/0.1.28
+synced_at=2026-10-10T06:08:51Z
