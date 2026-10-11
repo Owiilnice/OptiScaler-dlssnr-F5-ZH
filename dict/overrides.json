@@ -4,7 +4,6 @@
   "这些条目全都是 verify.py 拿重放结果和已人工确认的参考汉化版对账后，逐条判定的结果。",
   "判定标准：字符串是否参与 ini 读写、与配置值比较、作为 ImGui 控件 ID 或 GPU 调试对象名。是则必须保持英文。"
  ],
-
  "*": {
   "yes": [
    {
@@ -35,6 +34,11 @@
     "note": "快捷键设置项的显示名，参考汉化版译了"
    },
    {
+    "ctx": "TreeNodeEx(\"Neural Rendering\"",
+    "zh": "神经渲染",
+    "note": "主菜单左栏「神经渲染」分组标题（menu_common.cpp 的 ImGui::TreeNodeEx），用户可见，必须译。上游 0.1.27 新增左导航时加的这一处；ctx 用整段调用前缀，避免把 DlssNr_Dx12/DlssNr_Vk 的 GPU 调试对象名（同为 \"Neural Rendering\"）一起翻掉。"
+   },
+   {
     "zh": "Neural Rendering",
     "note": "其余出现处是 DlssNr_Dx12 / DlssNr_Vk 的 GPU 调试对象名，RenderDoc / PIX 里可见，必须保持英文"
    }
@@ -51,7 +55,6 @@
    }
   ]
  },
-
  "OptiScaler/menu/menu_common.cpp": {
   "Auto": [
    {
@@ -89,7 +92,6 @@
    }
   ]
  },
-
  "OptiScaler/dlssnr/DlssNr_Menu.cpp": {
   "s": [
    {

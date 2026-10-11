@@ -1269,7 +1269,7 @@
  "| Input: %s": "| 输入: %s",
  "| Spoof: %s": "| 伪装: %s",
  "Mode:": "模式：",
- "For a game that makes no upscaler call of its own. Optical F5Low works out the motion of the finished picture itself, so NR can still run.\\nNR only: NR runs on the finished picture. Costs less, no frame generation. Sets NR Pass at: to Finished Picture.\\nNR + upscaler & frame generation: also runs OptiScaler's upscaler (your choice in the menu, FSR when none) on the picture at the same size, to keep it steady. Frame generation needs this, and it unlocks the upscaler settings. Costs more. Moves NR Pass at: off Finished Picture.\\nBoth use the game's depth when Optical F5Low finds it (Advanced). Depth is optional: without it NR uses motion only. Choosing a mode turns depth on (Off turns it off); if depth was not running when the game started, restart the game to use it.\\nNR runs only with Enable Neural Rendering on. Changes apply at once.\\nNot for a game that calls an upscaler of its own: while it does, only Off can be chosen, and a mode already on stands aside.": "适用于游戏自身没有发出超分调用的场景。OptiScaler 的 F5Low 会自行推算成品画面的运动，因此 NR 仍能运行。\\n仅 NR：NR 在成品画面上运行。开销更低，不用帧生成。会把 NR 处理位置设为成品画面。\\nNR + 超分与帧生成：同时以相同尺寸运行 OptiScaler 的超分器（在菜单里选，未指定时用 FSR）作为稳定器。帧生成需要这样，且会解锁超分器设置。开销更高。会把 NR 处理位置移出成品画面。\\n两者都会在 F5Low 找到深度时使用游戏深度（高级）。深度是可选的：没有深度时 NR 只靠运动。选择模式即开启深度（关会关闭）；若游戏启动时深度未运行，需重启游戏才能使用。\\nNR 仅在开启神经网络渲染时运行。改动立即生效。\\n不适用于自身会发出超分调用的游戏：此时只能选关，已开启的模式会让位。",
+ "For a game that makes no upscaler call of its own. Optical F5Low works out the motion of the finished picture itself, so NR can still run.\\nNR only: NR runs on the finished picture. Costs less, no frame generation. Sets NR Pass at: to Finished Picture.\\nNR + upscaler & frame generation: also runs OptiScaler's upscaler (your choice in the menu, FSR when none) on the picture at the same size, to keep it steady. Frame generation needs this, and it unlocks the upscaler settings. Costs more. Moves NR Pass at: off Finished Picture.\\nBoth use the game's depth when Optical F5Low finds it (Advanced). Depth is optional: without it NR uses motion only. Choosing a mode turns depth on (Off turns it off); if depth was not running when the game started, restart the game to use it.\\nNR runs only with Enable Neural Rendering on. Changes apply at once.\\nNot for a game that calls an upscaler of its own: while it does, only Off can be chosen, and a mode already on stands aside.": "适用于游戏自身没有发出超分调用的场景。F5Low 会自行推算成品画面的运动，因此 NR 仍能运行。\\n仅 NR：NR 在成品画面上运行。开销更低，不用帧生成。会把 NR 处理位置设为成品画面。\\nNR + 超分与帧生成：同时以相同尺寸运行 OptiScaler 的超分器（在菜单里选，未指定时用 FSR）作为稳定器。帧生成需要这样，且会解锁超分器设置。开销更高。会把 NR 处理位置移出成品画面。\\n两者都会在 F5Low 找到深度时使用游戏深度（高级）。深度是可选的：没有深度时 NR 只靠运动。选择模式即开启深度（关会关闭）；若游戏启动时深度未运行，需重启游戏才能使用。\\nNR 仅在开启神经网络渲染时运行。改动立即生效。\\n不适用于自身会发出超分调用的游戏：此时只能选关，已开启的模式会让位。",
  "The game is calling an upscaler of its own, so NR runs on that call; this is not needed.": "游戏自身已在发出超分调用，NR 会挂在该调用上运行；此项无需启用。",
  "Save the settings and restart the game to use its depth (NR runs on motion only until then).": "保存设置并重启游戏以使用其深度（在此之前 NR 只靠运动运行）。",
  "Estimating motion only; nothing uses it.": "仅估算运动；暂无使用者。",
@@ -1400,5 +1400,18 @@
  "Reuse detail between frames: On": "帧间复用细节：开启",
  "Runs the model every other frame and moves the last result's detail onto the frames in between, which roughly halves NR's GPU cost. With Optical F5Low it also uses the trust mask to drop detail where the last frame cannot be trusted.\\nTurned on and tuned on the NR Options page.": "每隔一帧运行模型，并把上一次结果的细节搬到中间那些帧上，大致可把 NR 的 GPU 开销减半。配合 F5Low 时，还会用信任遮罩在「上一帧不可信」处丢弃细节。\\n在「NR 选项」页面开启与调校。",
  "Set in NR Options##f5lowdetailreuse": "在 NR 选项中设置##f5lowdetailreuse",
- "FG only (Optical F5Low) is on: frame generation runs from the upscaler's D3D12 copy, so only those are listed. Leave the mode to choose another.": "「仅 FG（F5Low）」已开启：帧生成从超分器的 D3D12 副本运行，因此只列出这些。退出该模式即可另选。"
+ "FG only (Optical F5Low) is on: frame generation runs from the upscaler's D3D12 copy, so only those are listed. Leave the mode to choose another.": "「仅 FG（F5Low）」已开启：帧生成从超分器的 D3D12 副本运行，因此只列出这些。退出该模式即可另选。",
+ "Image": "图像",
+ "Overlay & Look": "叠加层与外观",
+ "Misc": "杂项",
+ "Optical F5Low": "F5Low",
+ "Status & Presets": "状态与预设",
+ "NR Input": "NR 输入",
+ "NR Output": "NR 输出",
+ "Passes & Colour": "遍数与色彩",
+ "Compare & Debug": "对比与调试",
+ "Off##nativemode": "关##nativemode",
+ "NR only##nativemode": "仅 NR##nativemode",
+ "NR + upscaler & frame generation##nativemode": "NR + 超分与帧生成##nativemode",
+ "FG only (game's upscaler)##nativemode": "仅 FG（游戏超分器）##nativemode"
 }

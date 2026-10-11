@@ -74,42 +74,250 @@ ARRAY_DECL = re.compile(
 NOT_UI_ARRAY_VALUE = re.compile(r"(?:^##|^%|\\\\|/|\.(?:dll|ini|ttf|ttc|json|log|txt|hlsl|cube|exe|bin)$|^[0-9.]+$)")
 
 
+def strip_comments(text):
+    """把注释内容替换成等长空格，返回同长度字符串（偏移不变）。
+
+    结构性分析（找函数定义、找调用参数）必须在去注释的文本上做 —— 注释里的
+    括号和花括号会让正则匹配出根本不存在的「函数名」。实测：一段注释里的
+    `only (upscalers/...)` 让 `only` 变成「UI helper」，进而把一个 ini 配置值
+    数组 `stored[]` 误报成界面文案。
+    """
+    out = list(text)
+    i = 0
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c == '"':
+            i += 1
+            while i < n:
+                if text[i] == "\\":
+                    i += 2
+                    continue
+                if text[i] == '"':
+                    i += 1
+                    break
+                i += 1
+            continue
+        if c == "'":
+            i += 1
+            while i < n:
+                if text[i] == "\\":
+                    i += 2
+                    continue
+                if text[i] == "'":
+                    i += 1
+                    break
+                i += 1
+            continue
+        if c == "/" and i + 1 < n and text[i + 1] == "/":
+            j = text.find("\n", i)
+            j = n if j < 0 else j
+            out[i:j] = " " * (j - i)
+            i = j
+            continue
+        if c == "/" and i + 1 < n and text[i + 1] == "*":
+            j = text.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            out[i:j] = " " * (j - i)
+            i = j
+            continue
+        i += 1
+    return "".join(out)
+
+
+def call_arg_identifiers(text, open_idx):
+    """取 text[open_idx]（'('）这一对括号内出现的所有标识符。"""
+    close = match_paren(text, open_idx)
+    return set(re.findall(r"\b([A-Za-z_]\w*)\b", text[open_idx:close]))
+
+
+def match_paren(text, open_idx):
+    """返回与 text[open_idx]（'('）配对的 ')' 的下标；找不到返回 len(text)。"""
+    depth = 0
+    i = open_idx
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c == '"':
+            i += 1
+            while i < n:
+                if text[i] == "\\":
+                    i += 2
+                    continue
+                if text[i] == '"':
+                    i += 1
+                    break
+                i += 1
+            continue
+        if c == "'":
+            i += 1
+            while i < n:
+                if text[i] == "\\":
+                    i += 2
+                    continue
+                if text[i] == "'":
+                    i += 1
+                    break
+                i += 1
+            continue
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return n
+
+
+# 会出现在 if / for 这类控制语句前的关键字，别当成函数名。
+CTRL_KEYWORDS = {"if", "for", "while", "switch", "catch", "return", "do", "else", "sizeof"}
+
+# 本地函数的定义（`Name(args) {` 或 `Name(args) const {`）。
+FUNC_DEF = re.compile(r"\b([A-Za-z_]\w*)\s*\([^;{}]*\)\s*(?:const\s*)?\{")
+
+
+def ui_helper_names(text):
+    """函数体里含 ImGui 界面调用的本地函数名。
+
+    这些函数的参数会被转发到界面上，所以调用方传进去的数组同样是界面文案来源。
+    例：`InheritedProfileCombo(label, opt, names, nameCount)` 内部调
+    `ImGui::Combo(label, &selected, names, nameCount)`，调用方传的
+    `styles` / `presets` 数组不在任何 Combo 调用里 —— 只看 ImGui 调用会整类漏掉。
+    """
+    out = set()
+    for m in FUNC_DEF.finditer(text):
+        name = m.group(1)
+        if name in CTRL_KEYWORDS:
+            continue
+        open_idx = text.find("{", m.end() - 1)
+        if open_idx < 0:
+            continue
+        if UI_CALLS.search(text[open_idx : match_brace(text, open_idx)]):
+            out.add(name)
+    return out
+
+
 def ui_array_names(text):
     """找出真正当作界面选项来源的 char* 数组名。
 
-    光看「是不是 char* 数组」不行：`kGroups`（内核分组名）、`states`
-    （D3D12 资源状态）、`kDevice`（Vulkan 扩展名）、`models` 都是内部枚举名，
-    翻了会破坏功能。判据收紧成：数组名出现在 Combo / BeginCombo / Selectable /
-    RadioButton 的参数里 —— 那才是「这些字符串会显示在界面上」的证据。
+    光看「是不是 char* 数组」不行：`kGroups`（内核分组名）、`kDevice`
+    （Vulkan 扩展名）、`models` 都是内部枚举名，翻了会破坏功能。判据收紧成：
+    数组名出现在「会把参数画到界面上」的调用里 —— 直接调 ImGui 的
+    Combo / BeginCombo / Selectable / RadioButton，或调一个内部含 ImGui
+    调用的本地 helper（见 ui_helper_names）。
     """
+    callees = {"Combo", "BeginCombo", "Selectable", "RadioButton"} | ui_helper_names(text)
     names = set()
-    for m in re.finditer(
-        r"\b(?:ImGui::)?(?:Combo|BeginCombo|Selectable|RadioButton)\s*\(", text
-    ):
-        # 取该调用的一对括号范围
-        depth = 0
-        i = text.find("(", m.start())
-        j = i
-        n = len(text)
-        while j < n:
-            if text[j] == "(":
-                depth += 1
-            elif text[j] == ")":
-                depth -= 1
-                if depth == 0:
-                    break
-            j += 1
-        for ident in re.findall(r"\b([A-Za-z_]\w*)\b", text[i:j]):
-            names.add(ident)
+    for m in re.finditer(r"\b([A-Za-z_]\w*)\s*\(", text):
+        if m.group(1) not in callees:
+            continue
+        open_idx = text.find("(", m.end() - 1)
+        names |= call_arg_identifiers(text, open_idx)
     return names
 
 
+def match_brace(text, open_idx):
+    """返回与 text[open_idx]（'{'）配对的 '}' 的下标；找不到返回 len(text)。
+
+    跳过字符串、字符字面量与注释，所以初始化列表里的 `"}"` 不会误判。
+    """
+    depth = 0
+    i = open_idx
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c == '"':
+            i += 1
+            while i < n:
+                if text[i] == "\\":
+                    i += 2
+                    continue
+                if text[i] == '"':
+                    i += 1
+                    break
+                i += 1
+            continue
+        if c == "'":
+            i += 1
+            while i < n:
+                if text[i] == "\\":
+                    i += 2
+                    continue
+                if text[i] == "'":
+                    i += 1
+                    break
+                i += 1
+            continue
+        if c == "/" and i + 1 < n and text[i + 1] == "/":
+            j = text.find("\n", i)
+            i = n if j < 0 else j + 1
+            continue
+        if c == "/" and i + 1 < n and text[i + 1] == "*":
+            j = text.find("*/", i + 2)
+            i = n if j < 0 else j + 2
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return n
+
+
+# 结构体/类定义，用来判断某个数组的元素类型是不是「装界面文案的结构体」。
+STRUCT_DECL = re.compile(r"\b(?:struct|class)\s+([A-Za-z_]\w*)[^;{}]*\{")
+
+# 聚合数组声明：`inline constexpr PageInfo kPages[] = { { "id", "Label" }, ... };`
+# 元素类型不是 char*，而是自定义结构体。上游 0.1.27 的主菜单左导航就是这样：
+#     struct PageInfo { const char* name; const char* label; };
+#     inline constexpr PageInfo kPages[] = { { "upscaler", "Upscaler" }, ... };
+# 这一整类 ARRAY_DECL 匹配不到（那个正则要求 `char *`），且数组也不出现在任何
+# ImGui 调用里，ui_array_names 也捞不着 —— 于是导航栏整排标签漏译、且零告警。
+AGG_ARRAY_DECL = re.compile(
+    r"\b(?:inline\s+)?(?:constexpr\s+)?(?:static\s+)?([A-Za-z_]\w*)\s+([A-Za-z_]\w*)\s*\[\s*\]\s*=\s*\{"
+)
+
+
+def string_struct_types(text):
+    """找出「成员里有 const char* 字段」的结构体名。
+
+    这类结构体的数组元素几乎一定是界面文案（name/label 成对）。判据是结构体定义体
+    里出现 `const char*` —— 数字结构体（float 数组、D3D12_RESOURCE_BARRIER 之类）
+    不含，因此不会被误伤。
+    """
+    out = set()
+    for m in STRUCT_DECL.finditer(text):
+        open_idx = text.find("{", m.end() - 1)
+        if open_idx < 0:
+            continue
+        close = match_brace(text, open_idx)
+        if re.search(r"\bconst\s+char\s*\*", text[open_idx:close]):
+            out.add(m.group(1))
+    return out
+
+
 def array_item_ok(value):
-    """数组项是否是「给人看的选项名」。"""
+    """数组项是否是「给人看的选项名」。
+
+    只靠「元素类型里有 const char*」还不够 —— `HybridAssets::Entry{path,...}`
+    （文件路径）、`KernelProfile::Rule{part,...}`（内核名片段）也是 const char*，
+    但都是内部标识。加两条判据把它们挡掉：
+      1. 纯小写 = ini 键名 / 路径 / 内核名（kPages 的 "upscaler" "nr.status" 就是
+         ini 键，绝不能翻）。界面标签至少含一个大写字母 —— Upscaler / NR only /
+         Off / FG only (game's upscaler) 都满足。
+      2. 值里带分隔符（`_` `.` `/` `\\`）= 标识符或路径。
+    """
     display = value.split("##", 1)[0]
     if not display.strip():
         return False
     if NOT_UI_ARRAY_VALUE.search(display):
+        return False
+    if re.search(r"[_./\\]", display):
+        return False
+    if not re.search(r"[A-Z]", display):
         return False
     # 必须含至少两个连续字母，排除纯数字/符号项
     if not re.search(r"[A-Za-z]{2}", display):
@@ -117,73 +325,52 @@ def array_item_ok(value):
     return True
 
 
-def find_array_groups(text):
-    """切出所有 char* 数组初始化列表里的字面量组。
+def _collect_array(text, brace, name, out):
+    body = text[brace : match_brace(text, brace)]
+    for value, s, e in scan_groups(body):
+        out.append((value, brace + s, brace + e, name))
 
-    返回 [(value, start, end, array_name)]。这些是 ImGui::Combo / RadioButton 的
-    选项来源，必须翻译才不会有「界面半中半英」。只有被界面调用引用的数组才算
-    （见 ui_array_names），内部枚举名不翻。
+
+def find_array_groups(text):
+    """切出所有「界面文案数组」初始化列表里的字面量组。
+
+    返回 [(value, start, end, array_name)]。两类：
+      1. `char* xxx[] = {...}` —— ImGui::Combo / RadioButton 的选项来源。只有被
+         界面调用引用的才算（见 ui_array_names），内部枚举名（kGroups / kDevice
+         / states 里的非界面用途）不翻。
+      2. 聚合数组 `Type xxx[] = { {...} }`，且 Type 的成员里有 const char* ——
+         如主菜单左导航的 PageInfo kPages[]。这类不需要 ui_array_names 佐证：
+         「元素类型装的是字符串」本身就是「这是文案」的证据。
     """
-    used = ui_array_names(text)
+    code = strip_comments(text)
+    used = ui_array_names(code)
+    struct_types = string_struct_types(code)
     out = []
     pos = 0
     while True:
-        m = ARRAY_DECL.search(text, pos)
+        m = ARRAY_DECL.search(code, pos)
         if not m:
             break
-        name = m.group(1)
-        brace = text.find("{", m.end() - 1)
+        brace = code.find("{", m.end() - 1)
         if brace < 0:
             pos = m.end()
             continue
-        # 找到与 { 配对的 }，越过嵌套的 {} 与字符串
-        depth = 0
-        i = brace
-        n = len(text)
-        while i < n:
-            c = text[i]
-            if c == '"':
-                i += 1
-                while i < n:
-                    if text[i] == "\\":
-                        i += 2
-                        continue
-                    if text[i] == '"':
-                        i += 1
-                        break
-                    i += 1
-                continue
-            if c == "'":
-                i += 1
-                while i < n:
-                    if text[i] == "\\":
-                        i += 2
-                        continue
-                    if text[i] == "'":
-                        i += 1
-                        break
-                    i += 1
-                continue
-            if c == "/" and i + 1 < n and text[i + 1] == "/":
-                j = text.find("\n", i)
-                i = n if j < 0 else j + 1
-                continue
-            if c == "/" and i + 1 < n and text[i + 1] == "*":
-                j = text.find("*/", i + 2)
-                i = n if j < 0 else j + 2
-                continue
-            if c == "{":
-                depth += 1
-            elif c == "}":
-                depth -= 1
-                if depth == 0:
-                    break
-            i += 1
-        body = text[brace:i]
-        if name in used:
-            for value, s, e in scan_groups(body):
-                out.append((value, brace + s, brace + e, name))
-        pos = i + 1
+        if m.group(1) in used:
+            _collect_array(text, brace, m.group(1), out)
+        pos = match_brace(code, brace) + 1
+
+    pos = 0
+    while True:
+        m = AGG_ARRAY_DECL.search(code, pos)
+        if not m:
+            break
+        brace = code.find("{", m.end() - 1)
+        if brace < 0:
+            pos = m.end()
+            continue
+        if m.group(1) in struct_types:
+            _collect_array(text, brace, m.group(2), out)
+        pos = match_brace(code, brace) + 1
     return out
 
 
@@ -233,6 +420,11 @@ def main():
     if os.path.exists(unt_path):
         with io.open(unt_path, encoding="utf-8") as f:
             known |= set(json.load(f))
+    # 词典的「值」也是已知串。译文里有一部分刻意保留英文（F5Low / Native look /
+    # Lanczos2 / DLAA 这类专有名），它们不含汉字，has_cjk 拦不住 —— 不把值算作
+    # 已知的话，重放之后源码里的 "F5Low" 会被当成新串反复报出来，CI 还会因此
+    # 走进「自动翻译」分支。一个串等于某条译文，就说明它已经处理过了。
+    known |= {v for v in gdict.values() if v}
 
     files = set()
     for g in cfg["globs"]:
