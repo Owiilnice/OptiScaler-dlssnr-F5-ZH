@@ -3,7 +3,7 @@
 // Generated glyph range table for the Simplified Chinese localization.
 // Covers Basic Latin / Latin-1, common punctuation, CJK punctuation, fullwidth forms,
 // plus every CJK character that actually appears in the translated UI strings
-// (968 distinct non-ASCII code points).
+// (974 distinct non-ASCII code points).
 //
 // Used instead of ImFontAtlas::GetGlyphRangesDefault() (Latin only) so the Chinese
 // interface text renders with the bundled/loaded CJK font.
@@ -379,7 +379,7 @@ inline const ImWchar* ChineseGlyphRanges()
     0x6307, 0x6307,
     0x6309, 0x6309,
     0x6321, 0x6321,
-    0x632b, 0x632b,
+    0x632a, 0x632b,
     0x632f, 0x632f,
     0x6355, 0x6355,
     0x635f, 0x635f,
@@ -485,6 +485,7 @@ inline const ImWchar* ChineseGlyphRanges()
     0x6c38, 0x6c38,
     0x6c42, 0x6c42,
     0x6ca1, 0x6ca1,
+    0x6cb9, 0x6cb9,
     0x6cbf, 0x6cbf,
     0x6cd5, 0x6cd5,
     0x6ce2, 0x6ce2,
@@ -571,6 +572,7 @@ inline const ImWchar* ChineseGlyphRanges()
     0x77ed, 0x77ed,
     0x7801, 0x7801,
     0x7834, 0x7834,
+    0x7840, 0x7840,
     0x786c, 0x786c,
     0x786e, 0x786e,
     0x793a, 0x793a,
@@ -627,6 +629,7 @@ inline const ImWchar* ChineseGlyphRanges()
     0x7edc, 0x7edd,
     0x7edf, 0x7edf,
     0x7ee7, 0x7ee7,
+    0x7eea, 0x7eea,
     0x7eed, 0x7eed,
     0x7ef4, 0x7ef4,
     0x7eff, 0x7eff,
@@ -722,11 +725,13 @@ inline const ImWchar* ChineseGlyphRanges()
     0x8c61, 0x8c61,
     0x8d1f, 0x8d1f,
     0x8d21, 0x8d21,
+    0x8d23, 0x8d23,
     0x8d25, 0x8d25,
     0x8d28, 0x8d28,
     0x8d34, 0x8d35,
     0x8d39, 0x8d39,
     0x8d44, 0x8d44,
+    0x8d56, 0x8d56,
     0x8d70, 0x8d70,
     0x8d77, 0x8d77,
     0x8d85, 0x8d85,
