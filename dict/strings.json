@@ -1563,14 +1563,14 @@
  "Detail only": "仅细节",
  "Faces": "面部",
  "Painterly": "油画感",
- "Soft canvas": "平滑画布",
+ "Soft canvas": "柔和画布",
  "Structure": "结构",
  "Standard##lookbase": "标准##lookbase",
  "Natural##lookbase": "自然##lookbase",
  "Cinematic##lookbase": "电影感##lookbase",
  "For games that don't call an upscaler: Optical F5Low works out the motion itself so NR can run.\\nNR only: NR on the finished picture. Cheapest; no frame generation.\\nNR + upscaler & frame generation: adds OptiScaler's upscaler, which gives frame generation its input; needed for frame generation. With NR on, NR works on the game's picture and the upscaler does not process it.\\nFG only (Vulkan): frame generation for Vulkan games that call DLSS, FSR or XeSS themselves.\\nNeeds Enable Neural Rendering. On Vulkan, set up frame generation before the game starts.": "面向自己不做超分调用的游戏：F5Low 会自行推算画面运动，因此 NR 仍可运行。\\n仅 NR：NR 作用于成品画面。开销最低，不含帧生成。\\nNR + 超分与帧生成：额外启用 OptiScaler 的超分器，为帧生成提供输入；帧生成必须依赖它。NR 开启时，NR 作用于游戏画面，超分器不再处理画面。\\n仅 FG（Vulkan）：为自己调用 DLSS、FSR 或 XeSS 的 Vulkan 游戏做帧生成。\\n需要开启「启用神经渲染」。在 Vulkan 上，需在游戏启动前配置好帧生成。",
  "Built on:": "基于：",
- "Which look Faces, Painterly, Soft canvas and Structure start from: its style, strength and curve. The look then adds its own skin, detail or input changes. Picking a base while one of these looks is on applies it right away; with none on, it only sets what the next click uses.": "面部、油画感、平滑画布与结构这几种外观的起点：决定它们的基础风格、强度与曲线。之后各外观再叠加自己的肤色、细节或输入改动。这些外观开启时切换基础会立即生效；都未开启时，只设定下次点选时使用的基础。",
+ "Which look Faces, Painterly, Soft canvas and Structure start from: its style, strength and curve. The look then adds its own skin, detail or input changes. Picking a base while one of these looks is on applies it right away; with none on, it only sets what the next click uses.": "面部、油画感、柔和画布与结构这几种外观的起点：决定它们的基础风格、强度与曲线。之后各外观再叠加自己的肤色、细节或输入改动。这些外观开启时切换基础会立即生效；都未开启时，只设定下次点选时使用的基础。",
  "How NR's edit looks: each pass's style and strengths, the curve, Detail and Colour strength, skin and scenery, and the input style. Leaves the pass count, the quality tier and exposure alone. Green = in effect; changing one of its settings clears it.": "NR 的画面处理方式：各遍的风格与强度、曲线、细节与色彩强度、肤色与景物，以及输入风格。不改动遍数、质量档位与曝光。绿色表示已生效；改动其中任一设置即会取消。",
  "Sets the pass count, with NR on FP8 and the default exposure. How each pass looks is the Look presets'. Green = in effect; changing the pass count clears it.": "设定遍数，NR 使用 FP8 与默认曝光。各遍的外观由「外观预设」决定。绿色表示已生效；改动遍数即会取消。",
  "Quality tiers for NR before SR, from High (full resolution, best) to Potato (50%, cheapest). Sets Upscale Mode and Method and Model resolution, and runs composed. The look is the Look presets'. Green = in effect; changing those clears it.": "超分前 NR 的质量档位，从「高」（全分辨率，最佳）到「土豆」（50%，最省）。会设定超分模式、方式与模型分辨率，并以合成方式运行。外观由「外观预设」决定。绿色表示已生效；改动这些设置即会取消。",
@@ -1591,5 +1591,6 @@
  "What lowers latency. The first entry is picked for this setup: leave it there unless a game stutters or misbehaves with it.\\nFrame cap only just moves the FPS Limit's wait to before the game reads input.": "用什么降低延迟。第一项是本配置的默认选择：除非某游戏因此卡顿或异常，否则保持不选。\\n「仅限制帧率」只是把帧率上限的等待挪到游戏读取输入之前。",
  "Frame cap only does nothing until an FPS Limit is set.": "在设定帧率上限之前，「仅限制帧率」不产生任何效果。",
  "Load ASI plugins": "加载 ASI 插件",
- "Let OptiScaler load *.asi files from the plugins folder\\nini: [Plugins] LoadAsiPlugins. Save Settings and restart to apply.": "允许 OptiScaler 从 plugins 文件夹加载 *.asi 文件\\nini：[Plugins] LoadAsiPlugins。点「保存设置」并重启以生效。"
+ "Let OptiScaler load *.asi files from the plugins folder\\nini: [Plugins] LoadAsiPlugins. Save Settings and restart to apply.": "允许 OptiScaler 从 plugins 文件夹加载 *.asi 文件\\nini：[Plugins] LoadAsiPlugins。点「保存设置」并重启以生效。",
+ "Smooth canvas": "平滑画布"
 }
