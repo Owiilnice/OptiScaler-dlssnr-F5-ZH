@@ -31,10 +31,26 @@ ROOT = os.path.dirname(HERE)
 DICT = os.path.join(ROOT, "dict")
 
 # 出现在这些调用里的字面量是给人看的
+#
+# 2026-10-18 补了一批「提示类」调用（此前整类漏掉，实测 19 条全英文）：
+#   SeparatorText / SeparatorTextEx  分区标题（Low latency、Look Presets、NR Exposure…）
+#   SetTooltip / SetItemTooltip      悬停提示正文
+#   BeginItemTooltip                 同上（ImGui 1.90+ 的写法）
+#   ProgressBar                     进度条上的文字（"Starting..." / "Measuring: hold the camera still"）
+#   InsertNotification              右下角通知弹窗
+#   TableSetupColumn                表头文字
+#   InputInt / InputScalar          输入框标签
+#   PlotLines / PlotHistogram       图表标签
+#   ColorEdit3 / ColorEdit4         取色器标签
+#   CheckboxFlags                   复选标签
+#   TextLinkOpenURL                 可点链接文字
 UI_CALLS = re.compile(
     r"\b(?:ImGui::(?:Text|TextWrapped|TextDisabled|TextColored|TextUnformatted|Button|SmallButton|Checkbox|"
     r"Selectable|MenuItem|RadioButton|Combo|BeginCombo|CollapsingHeader|SliderFloat|SliderInt|InputText|InputFloat|"
-    r"BeginTabItem|Begin|BeginChild|PushID|TreeNode|TreeNodeEx|LabelText|BulletText)"
+    r"BeginTabItem|Begin|BeginChild|PushID|TreeNode|TreeNodeEx|LabelText|BulletText|"
+    r"SeparatorText|SeparatorTextEx|SetTooltip|SetItemTooltip|BeginItemTooltip|ProgressBar|InsertNotification|"
+    r"TableSetupColumn|InputInt|InputScalar|PlotLines|PlotHistogram|ColorEdit3|ColorEdit4|CheckboxFlags|"
+    r"TextLinkOpenURL)"
     r"|ShowHelpMarker|HelpMarker|ScopedCollapsingHeader|Fail|Toast|Keybind|StrFmt|AddResourceBarrier"
     r"|AddDLSS\w*|AddFSR\w*|AddXe\w*|AddOpti\w*|setTitle|setContent)\b"
 )
@@ -52,7 +68,9 @@ NOT_UI_VALUE = re.compile(
 # 单个词（无空格无冒号）的额外判定：
 #   "Upscaler" / "Framerate" / "Auto" 这类首字母大写 + 全小写的词是界面标签，保留
 #   "DXVK" / "nvngx" / "mv_resource" / "kNames" 这类不是，丢掉
-BARE_WORD_OK = re.compile(r"^[A-Z][a-z]{2,}$")
+# 允许一个连字符复合词（"Band-pass" / "Anti-Lag"），否则图表标签 "Band-pass##tune"
+# 会被当成技术标识丢掉。
+BARE_WORD_OK = re.compile(r"^[A-Z][a-z]{2,}(?:-[A-Za-z]+)*$")
 
 # 下拉/枚举选项数组的声明行。ImGui::Combo(label, &v, names, N) 的第 3 个参数是个
 # 字符串数组，而这些数组**不在任何 ImGui 调用里**，光靠调用白名单整类扫不到 ——
@@ -394,9 +412,101 @@ def looks_like_ui(value):
 
 
 def statement_start(text, pos):
-    """回退到所在语句的开头，用来判断这个字面量属于哪个调用。"""
-    s = max(text.rfind(";", 0, pos), text.rfind("{", 0, pos), text.rfind("}", 0, pos))
-    return s + 1
+    """回退到所在语句的开头，用来判断这个字面量属于哪个调用。
+
+    `{` 不一定是语句边界：`ImGui::InsertNotification({ type, ms, "文本" })` 里的
+    `{` 是聚合初始化列表。紧跟在 `(` `,` `=` `{` 后面的 `{` 要跳过继续往前找，
+    否则语句头会落在 `{` 之后，调用名被切掉、整条漏检（实测漏了右下角那条
+    「No upscaler call from this game so far」通知）。
+    """
+    i = pos
+    while True:
+        s = max(text.rfind(";", 0, i), text.rfind("{", 0, i), text.rfind("}", 0, i))
+        if s < 0:
+            return 0
+        if text[s] == "{":
+            j = s - 1
+            while j >= 0 and text[j] in " \t\r\n":
+                j -= 1
+            if j >= 0 and text[j] in "(,={":
+                i = s          # 初始化列表的 {，不是语句边界
+                continue
+        return s + 1
+
+
+# 变量形式的界面文本：先存进变量、再把变量名传给界面调用。
+#   static const char* presetHelp = "Which model NR runs on this pass. ...";
+#   HelpMarker(presetHelp);
+# 这类字面量不在任何调用里（调用拿到的是变量名），UI_CALLS 白名单和数组扫描都
+# 捞不到 —— 实测 0.1.32 的 presetHelp（外观预设的说明）就栽在这。
+VAR_DECL = re.compile(
+    r"\b(?:static\s+)?(?:constexpr\s+)?(?:const\s+)?char\s*(?:const\s*)?\*\s*(?:const\s*)?"
+    r"([A-Za-z_]\w*)\s*=\s*"
+)
+
+
+def _stmt_end(text, i):
+    """从 i 往后找第一个「字符串外」的分号，返回其下标（找不到返回 len）。
+
+    不能直接 `text.find(";", i)`：提示文本自己会带分号
+    （`"... the small model (about half the cost, softer; only in 310.9 DLLs)"`），
+    直接找会把初始化表达式截断在半句话上。
+    """
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c == '"':
+            i += 1
+            while i < n:
+                if text[i] == "\\":
+                    i += 2
+                    continue
+                if text[i] == '"':
+                    i += 1
+                    break
+                i += 1
+            continue
+        if c == ";":
+            return i
+        i += 1
+    return n
+
+
+def find_var_text_groups(text):
+    """找「存进变量再传给界面」的提示文本。
+
+    三条判据全满足才收（宁可漏，不可错 —— 翻错 ini 键会直接破坏功能）：
+      1. 声明是 char* 类型（含 const / static / constexpr 组合）；
+      2. 初始化表达式里有字符串字面量；
+      3. **同文件**里该变量名出现在界面调用的参数里。
+
+    跨文件的状态文本（`DetailReuseInfo.why`、`ExposureScan::Status()` 这类
+    经过结构体字段或返回值转手的）不在此列 —— 静态追踪成本太高，
+    靠技能文档里的「变量/返回值形式的提示」清单人工兜。
+    """
+    code = strip_comments(text)
+    ui_spans = []
+    for m in UI_CALLS.finditer(code):
+        oi = code.find("(", m.end() - 1)
+        if oi < 0:
+            continue
+        ui_spans.append((oi, match_paren(code, oi)))
+
+    out = []
+    for m in VAR_DECL.finditer(code):
+        name = m.group(1)
+        semi = _stmt_end(code, m.end())
+        if semi >= len(code):
+            continue
+        expr = text[m.end() : semi]
+        if '"' not in expr:
+            continue
+        pat = re.compile(r"\b" + re.escape(name) + r"\b")
+        if not any(pat.search(code[a:b]) for a, b in ui_spans):
+            continue
+        for value, s, e in scan_groups(expr):
+            out.append((value, m.end() + s, m.end() + e, name))
+    return out
 
 
 def main():
@@ -465,6 +575,19 @@ def main():
                 continue
             line = text.count("\n", 0, s) + 1
             pending.append({"file": rel, "line": line, "call": f"array:{aname}", "en": value})
+
+        # 变量形式的提示文本（存进变量再传给界面调用）单独一路。
+        for value, s, e, vname in find_var_text_groups(text):
+            if has_cjk(value) or not value.strip():
+                continue
+            if value in known:
+                continue
+            if not re.search(r"[A-Za-z]{2}", value):
+                continue
+            if not looks_like_ui(value):
+                continue
+            line = text.count("\n", 0, s) + 1
+            pending.append({"file": rel, "line": line, "call": f"var:{vname}", "en": value})
 
     pending.sort(key=lambda p: (p["file"], p["line"]))
 
