@@ -1,5 +1,5 @@
 diff --git a/OptiScaler/dllmain.cpp b/OptiScaler/dllmain.cpp
-index ccc85ea..b806067 100644
+index ccc85ea..803f623 100644
 --- a/OptiScaler/dllmain.cpp
 +++ b/OptiScaler/dllmain.cpp
 @@ -48,6 +48,8 @@
@@ -97,7 +97,52 @@ index ccc85ea..b806067 100644
          if (_passThruMode)
          {
              NtdllProxy::Init();
-@@ -2215,7 +2238,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
+@@ -1867,6 +1890,12 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
+             Config::Instance()->LogLevel.set_volatile_value(1);
+ #endif
+ 
++        if (SwitchFlags::On("stop0"))
++        {
++            spdlog::warn("early return (optswitch: stop0)");
++            return true;
++        }
++
+         PrepareLogger();
+ 
+         // Off by default: a crash then leaves no file behind, and the game's own crash handling is untouched
+@@ -2089,8 +2118,21 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
+         // Check for working mode and attach hooks
+         spdlog::info("");
+         CheckWorkingMode();
++
++        if (SwitchFlags::On("stopA"))
++        {
++            spdlog::warn("early return (optswitch: stopA)");
++            return true;
++        }
++
+         CheckMemoryForProxies();
+ 
++        if (SwitchFlags::On("stopB"))
++        {
++            spdlog::warn("early return (optswitch: stopB)");
++            return true;
++        }
++
+         // OptiFG & Overlay Checks
+         if ((Config::Instance()->FGInput.value_or_default() == FGInput::Upscaler) &&
+             !Config::Instance()->DisableOverlays.has_value())
+@@ -2211,11 +2253,20 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
+         }
+ 
+         spdlog::info("");
++        if (SwitchFlags::On("stopC"))
++        {
++            spdlog::warn("early return (optswitch: stopC)");
++            return true;
++        }
++
+         spdlog::info("Init done");
          spdlog::info("---------------------------------------------");
          spdlog::info("");
  
