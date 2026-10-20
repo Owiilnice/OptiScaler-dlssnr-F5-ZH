@@ -1,5 +1,5 @@
 diff --git a/OptiScaler/dllmain.cpp b/OptiScaler/dllmain.cpp
-index ccc85ea..73d9160 100644
+index ccc85ea..b584949 100644
 --- a/OptiScaler/dllmain.cpp
 +++ b/OptiScaler/dllmain.cpp
 @@ -48,6 +48,8 @@
@@ -11,7 +11,19 @@ index ccc85ea..73d9160 100644
  #include <version_check.h>
  #include <misc/IdentifyGpu.h>
  #include <sha1/sha1.hpp>
-@@ -956,30 +958,38 @@ static void CheckWorkingMode()
+@@ -878,7 +880,10 @@ static void CheckWorkingMode()
+ 
+         LOG_DEBUG("Check for d3d12");
+         HMODULE d3d12Module = nullptr;
+-        d3d12Module = GetDllNameWModule(&dx12NamesW);
++        if (SwitchFlags::On("noearlyd3d12"))
++            LOG_WARN("early d3d12.dll load skipped (optswitch: noearlyd3d12)");
++        else
++            d3d12Module = GetDllNameWModule(&dx12NamesW);
+         if (Config::Instance()->OverlayMenu.value_or_default() && d3d12Module != nullptr)
+         {
+             LOG_DEBUG("d3d12.dll already in memory");
+@@ -956,30 +961,38 @@ static void CheckWorkingMode()
  
      // NVAPI
      // Doesn't seem to like GetModuleHandle for some reason, so call our load to make sure
@@ -63,7 +75,7 @@ index ccc85ea..73d9160 100644
      {
          User32Spoofing::Hook();
      }
-@@ -987,6 +997,11 @@ static void CheckWorkingMode()
+@@ -987,6 +1000,11 @@ static void CheckWorkingMode()
      // hook streamline right away if it's already loaded
      HMODULE slModule = nullptr;
      slModule = GetDllNameWModule(&slInterposerNamesW);
@@ -75,7 +87,7 @@ index ccc85ea..73d9160 100644
      if (slModule != nullptr)
      {
          LOG_DEBUG("sl.interposer.dll already in memory");
-@@ -1751,6 +1766,12 @@ void CheckForExcludedProcess()
+@@ -1751,6 +1769,12 @@ void CheckForExcludedProcess()
  
  void CheckMemoryForProxies()
  {
@@ -88,7 +100,7 @@ index ccc85ea..73d9160 100644
      FfxApiProxy::InitFfxDx12();
      FfxApiProxy::InitFfxDx12_SR();
      FfxApiProxy::InitFfxDx12_FG();
-@@ -1848,6 +1869,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
+@@ -1848,6 +1872,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
  
          CheckForExcludedProcess();
  
@@ -97,7 +109,7 @@ index ccc85ea..73d9160 100644
          if (_passThruMode)
          {
              NtdllProxy::Init();
-@@ -1867,6 +1890,12 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
+@@ -1867,6 +1893,12 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
              Config::Instance()->LogLevel.set_volatile_value(1);
  #endif
  
@@ -110,7 +122,7 @@ index ccc85ea..73d9160 100644
          PrepareLogger();
  
          // Off by default: a crash then leaves no file behind, and the game's own crash handling is untouched
-@@ -2024,7 +2053,21 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
+@@ -2024,7 +2056,21 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
              return nvidiaDetected;
          };
  
@@ -133,9 +145,16 @@ index ccc85ea..73d9160 100644
  
          spdlog::info("");
          spdlog::info("Check for DLSS files");
-@@ -2089,8 +2132,21 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
+@@ -2088,9 +2134,28 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
+ 
          // Check for working mode and attach hooks
          spdlog::info("");
++        if (SwitchFlags::On("stop1b"))
++        {
++            spdlog::warn("early return (optswitch: stop1b)");
++            return true;
++        }
++
          CheckWorkingMode();
 +
 +        if (SwitchFlags::On("stopA"))
@@ -155,7 +174,7 @@ index ccc85ea..73d9160 100644
          // OptiFG & Overlay Checks
          if ((Config::Instance()->FGInput.value_or_default() == FGInput::Upscaler) &&
              !Config::Instance()->DisableOverlays.has_value())
-@@ -2211,11 +2267,20 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
+@@ -2211,11 +2276,20 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
          }
  
          spdlog::info("");
