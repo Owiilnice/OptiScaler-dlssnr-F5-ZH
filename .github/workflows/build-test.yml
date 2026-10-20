@@ -5,6 +5,11 @@ name: BO6 兼容测试构建
 # 使命召唤21（BO6 离线版）里跑起来。验证通过后这个 workflow 和补丁都可以删。
 
 on:
+  # 用 push 触发：workflow_dispatch 只认默认分支上的 workflow 文件，
+  # 这个文件只存在于 compat/bo6，所以靠往该分支推提交来启动。
+  push:
+    branches:
+      - 'compat/**'
   workflow_dispatch:
     inputs:
       apply_localize:
@@ -56,7 +61,7 @@ jobs:
         run: git apply --verbose .github/bo6/compat.patch
 
       - name: 重放汉化层
-        if: ${{ inputs.apply_localize }}
+        if: ${{ github.event_name == 'push' || inputs.apply_localize }}
         shell: bash
         run: python scripts/apply_patch.py . --report apply-report.json
 
