@@ -1,0 +1,108 @@
+diff --git a/OptiScaler/dllmain.cpp b/OptiScaler/dllmain.cpp
+index ccc85ea..d67bcec 100644
+--- a/OptiScaler/dllmain.cpp
++++ b/OptiScaler/dllmain.cpp
+@@ -48,6 +48,15 @@
+ 
+ #include <cwctype>
+ #include <magic_enum.hpp>
++
++// Diagnostic kill switches, read once from the environment so a single build can
++// test several hypotheses without rebuilding. Any value other than "1" keeps the
++// stock behaviour.
++static bool EnvSwitchOn(const wchar_t* name)
++{
++    wchar_t buf[8] {};
++    return GetEnvironmentVariableW(name, buf, 8) > 0 && buf[0] == L'1';
++}
+ #include <version_check.h>
+ #include <misc/IdentifyGpu.h>
+ #include <sha1/sha1.hpp>
+@@ -962,20 +971,28 @@ static void CheckWorkingMode()
+         auto nvapi64 = LibraryLoadHooks::LoadNvApi();
+     }
+ 
+-    // GDI32
+-    hookGdi32();
++    // GDI32 / Wintrust / Crypt32 / Advapi32
++    if (EnvSwitchOn(L"OPTI_NO_EXTRAHOOKS"))
++    {
++        spdlog::warn("Gdi32/Wintrust/Crypt32/Advapi32 hooks skipped (OPTI_NO_EXTRAHOOKS=1)");
++    }
++    else
++    {
++        // GDI32
++        hookGdi32();
+ 
+-    // Wintrust
+-    hookWintrust();
++        // Wintrust
++        hookWintrust();
+ 
+-    // Crypt32
+-    hookCrypt32();
++        // Crypt32
++        hookCrypt32();
+ 
+-    // Advapi32
+-    if (Config::Instance()->DxgiSpoofing.value_or_default() ||
+-        Config::Instance()->StreamlineSpoofing.value_or_default())
+-    {
+-        hookAdvapi32();
++        // Advapi32
++        if (Config::Instance()->DxgiSpoofing.value_or_default() ||
++            Config::Instance()->StreamlineSpoofing.value_or_default())
++        {
++            hookAdvapi32();
++        }
+     }
+ 
+     // User32
+@@ -2215,7 +2232,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
+         spdlog::info("---------------------------------------------");
+         spdlog::info("");
+ 
+-        CreateThread(nullptr, 0, getGpuInfo, GetDllNameWModule(&dx12NamesW), 0, nullptr);
++        if (EnvSwitchOn(L"OPTI_NO_GPUPROBE"))
++            spdlog::warn("getGpuInfo worker skipped (OPTI_NO_GPUPROBE=1)");
++        else
++            CreateThread(nullptr, 0, getGpuInfo, GetDllNameWModule(&dx12NamesW), 0, nullptr);
+ 
+ #ifndef _DEBUG
+         if (Config::Instance()->LogLevel.value_or_default() == 0 && Config::Instance()->LogToFile.value_or_default())
+diff --git a/OptiScaler/hooks/D3D12_Hooks.cpp b/OptiScaler/hooks/D3D12_Hooks.cpp
+index 0794585..c514790 100644
+--- a/OptiScaler/hooks/D3D12_Hooks.cpp
++++ b/OptiScaler/hooks/D3D12_Hooks.cpp
+@@ -2420,6 +2420,13 @@ static void UnhookDevice()
+ 
+ void D3D12Hooks::Hook()
+ {
++    wchar_t noD3d12Hook[8] {};
++    if (GetEnvironmentVariableW(L"OPTI_NO_D3D12HOOK", noD3d12Hook, 8) > 0 && noD3d12Hook[0] == L'1')
++    {
++        LOG_WARN("D3D12Hooks::Hook skipped (OPTI_NO_D3D12HOOK=1)");
++        return;
++    }
++
+     std::lock_guard<std::mutex> lock(hookMutex);
+ 
+     LOG_DEBUG("");
+diff --git a/OptiScaler/proxies/NVNGX_Proxy.h b/OptiScaler/proxies/NVNGX_Proxy.h
+index 8fc32b7..1350fcb 100644
+--- a/OptiScaler/proxies/NVNGX_Proxy.h
++++ b/OptiScaler/proxies/NVNGX_Proxy.h
+@@ -430,6 +430,13 @@ class NVNGXProxy
+   public:
+     static void InitNVNGX(HMODULE nvngxModule = nullptr)
+     {
++        wchar_t noNvngx[8] {};
++        if (GetEnvironmentVariableW(L"OPTI_NO_NVNGX", noNvngx, 8) > 0 && noNvngx[0] == L'1')
++        {
++            LOG_WARN("NVNGXProxy::InitNVNGX skipped (OPTI_NO_NVNGX=1)");
++            return;
++        }
++
+         // if dll already loaded
+         if (_module.dll != nullptr)
+             return;

@@ -1,0 +1,75 @@
+name: BO6 兼容测试构建
+
+# 只编译、只上传产物，不创建 Release、不提交任何东西。
+# 用来验证 .github/bo6/compat.patch 里的诊断开关能否让上游 fork 在
+# 使命召唤21（BO6 离线版）里跑起来。验证通过后这个 workflow 和补丁都可以删。
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply_localize:
+        description: '是否重放汉化层（要汉化包就勾上）'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: 读上游基线
+        id: up
+        shell: bash
+        run: |
+          sha=$(grep -m1 '^commit=' .upstream-revision | cut -d= -f2)
+          br=$(grep -m1 '^branch=' .upstream-revision | cut -d= -f2)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "branch=$br" >> "$GITHUB_OUTPUT"
+          echo "上游: $br @ $sha"
+
+      - name: 取上游源码与子模块
+        shell: bash
+        env:
+          SYNC_SUBMODULES: '1'
+        run: |
+          set +e
+          bash scripts/sync_upstream.sh \
+            "https://github.com/janblade/OptiScaler-F5-DLSSNR-Multipass.git" \
+            "${{ steps.up.outputs.branch }}" \
+            "${{ steps.up.outputs.sha }}"
+          code=$?
+          set -e
+          # 0=有变化 1=无变化 >=2 才是真出错
+          if [ "$code" -ge 2 ]; then
+            echo "::error::同步上游失败（退出码 $code）"
+            exit 1
+          fi
+
+      - name: 打 BO6 兼容补丁
+        shell: bash
+        run: git apply --verbose .github/bo6/compat.patch
+
+      - name: 重放汉化层
+        if: ${{ inputs.apply_localize }}
+        shell: bash
+        run: python scripts/apply_patch.py . --report apply-report.json
+
+      - name: 加入 MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: 编译
+        shell: pwsh
+        run: pwsh scripts/build.ps1 -SourceDir "$env:GITHUB_WORKSPACE" -OutDir "$env:GITHUB_WORKSPACE/dist/out"
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: optiscaler-bo6
+          path: dist/out
+          retention-days: 7
