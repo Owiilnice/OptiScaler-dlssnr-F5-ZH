@@ -1,31 +1,23 @@
 diff --git a/OptiScaler/dllmain.cpp b/OptiScaler/dllmain.cpp
-index ccc85ea..d67bcec 100644
+index ccc85ea..b039d49 100644
 --- a/OptiScaler/dllmain.cpp
 +++ b/OptiScaler/dllmain.cpp
-@@ -48,6 +48,15 @@
+@@ -48,6 +48,7 @@
  
  #include <cwctype>
  #include <magic_enum.hpp>
-+
-+// Diagnostic kill switches, read once from the environment so a single build can
-+// test several hypotheses without rebuilding. Any value other than "1" keeps the
-+// stock behaviour.
-+static bool EnvSwitchOn(const wchar_t* name)
-+{
-+    wchar_t buf[8] {};
-+    return GetEnvironmentVariableW(name, buf, 8) > 0 && buf[0] == L'1';
-+}
++#include <misc/SwitchFlags.h>
  #include <version_check.h>
  #include <misc/IdentifyGpu.h>
  #include <sha1/sha1.hpp>
-@@ -962,20 +971,28 @@ static void CheckWorkingMode()
+@@ -962,20 +963,28 @@ static void CheckWorkingMode()
          auto nvapi64 = LibraryLoadHooks::LoadNvApi();
      }
  
 -    // GDI32
 -    hookGdi32();
 +    // GDI32 / Wintrust / Crypt32 / Advapi32
-+    if (EnvSwitchOn(L"OPTI_NO_EXTRAHOOKS"))
++    if (SwitchFlags::On("noextra"))
 +    {
 +        spdlog::warn("Gdi32/Wintrust/Crypt32/Advapi32 hooks skipped (OPTI_NO_EXTRAHOOKS=1)");
 +    }
@@ -58,12 +50,25 @@ index ccc85ea..d67bcec 100644
      }
  
      // User32
-@@ -2215,7 +2232,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
+@@ -1751,6 +1760,12 @@ void CheckForExcludedProcess()
+ 
+ void CheckMemoryForProxies()
+ {
++    if (SwitchFlags::On("noproxy"))
++    {
++        LOG_WARN("CheckMemoryForProxies skipped (optswitch: noproxy)");
++        return;
++    }
++
+     FfxApiProxy::InitFfxDx12();
+     FfxApiProxy::InitFfxDx12_SR();
+     FfxApiProxy::InitFfxDx12_FG();
+@@ -2215,7 +2230,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
          spdlog::info("---------------------------------------------");
          spdlog::info("");
  
 -        CreateThread(nullptr, 0, getGpuInfo, GetDllNameWModule(&dx12NamesW), 0, nullptr);
-+        if (EnvSwitchOn(L"OPTI_NO_GPUPROBE"))
++        if (SwitchFlags::On("noprobe"))
 +            spdlog::warn("getGpuInfo worker skipped (OPTI_NO_GPUPROBE=1)");
 +        else
 +            CreateThread(nullptr, 0, getGpuInfo, GetDllNameWModule(&dx12NamesW), 0, nullptr);
@@ -71,35 +76,188 @@ index ccc85ea..d67bcec 100644
  #ifndef _DEBUG
          if (Config::Instance()->LogLevel.value_or_default() == 0 && Config::Instance()->LogToFile.value_or_default())
 diff --git a/OptiScaler/hooks/D3D12_Hooks.cpp b/OptiScaler/hooks/D3D12_Hooks.cpp
-index 0794585..c514790 100644
+index 0794585..0872c4d 100644
 --- a/OptiScaler/hooks/D3D12_Hooks.cpp
 +++ b/OptiScaler/hooks/D3D12_Hooks.cpp
-@@ -2420,6 +2420,13 @@ static void UnhookDevice()
+@@ -1,5 +1,6 @@
+ #include "pch.h"
+ #include "D3D12_Hooks.h"
++#include <misc/SwitchFlags.h>
+ #include <dlssnr/DlssNr_ExposureScan.h>
+ 
+ #include <Util.h>
+@@ -2420,6 +2421,12 @@ static void UnhookDevice()
  
  void D3D12Hooks::Hook()
  {
-+    wchar_t noD3d12Hook[8] {};
-+    if (GetEnvironmentVariableW(L"OPTI_NO_D3D12HOOK", noD3d12Hook, 8) > 0 && noD3d12Hook[0] == L'1')
++    if (SwitchFlags::On("nod3d12"))
 +    {
-+        LOG_WARN("D3D12Hooks::Hook skipped (OPTI_NO_D3D12HOOK=1)");
++        LOG_WARN("D3D12Hooks::Hook skipped (optswitch: nod3d12)");
 +        return;
 +    }
 +
      std::lock_guard<std::mutex> lock(hookMutex);
  
      LOG_DEBUG("");
+diff --git a/OptiScaler/hooks/Dxgi_Hooks.cpp b/OptiScaler/hooks/Dxgi_Hooks.cpp
+index 4d42adc..2120476 100644
+--- a/OptiScaler/hooks/Dxgi_Hooks.cpp
++++ b/OptiScaler/hooks/Dxgi_Hooks.cpp
+@@ -1,5 +1,6 @@
+ #include "pch.h"
+ #include "Dxgi_Hooks.h"
++#include <misc/SwitchFlags.h>
+ 
+ #include "DxgiFactory_Hooks.h"
+ 
+@@ -267,6 +268,12 @@ inline static HRESULT hkCreateDXGIFactory2(UINT Flags, REFIID riid, IDXGIFactory
+ 
+ void DxgiHooks::Hook()
+ {
++    if (SwitchFlags::On("nodxgi"))
++    {
++        LOG_WARN("DxgiHooks::Hook skipped (optswitch: nodxgi)");
++        return;
++    }
++
+     std::lock_guard<std::mutex> lock(hookMutex);
+ 
+     // If not spoofing and
+diff --git a/OptiScaler/hooks/Kernel_Hooks.h b/OptiScaler/hooks/Kernel_Hooks.h
+index 7692919..207ce14 100644
+--- a/OptiScaler/hooks/Kernel_Hooks.h
++++ b/OptiScaler/hooks/Kernel_Hooks.h
+@@ -1,6 +1,7 @@
+ #pragma once
+ #include "SysUtils.h"
+ #include "Logger.h"
++#include <misc/SwitchFlags.h>
+ 
+ #include <proxies/Kernel32_Proxy.h>
+ #include <proxies/KernelBase_Proxy.h>
+@@ -145,6 +146,12 @@ class KernelHooks
+ 
+     static void HookBase()
+     {
++        if (SwitchFlags::On("nokernel"))
++        {
++            LOG_WARN("KernelHooks::HookBase skipped (optswitch: nokernel)");
++            return;
++        }
++
+         std::lock_guard<std::mutex> lock(hookMutexBase);
+ 
+         LOG_DEBUG("");
+diff --git a/OptiScaler/hooks/Ntdll_Hooks.h b/OptiScaler/hooks/Ntdll_Hooks.h
+index 2db86eb..81ac737 100644
+--- a/OptiScaler/hooks/Ntdll_Hooks.h
++++ b/OptiScaler/hooks/Ntdll_Hooks.h
+@@ -4,6 +4,7 @@
+ #include <State.h>
+ #include <Config.h>
+ #include <DllNames.h>
++#include <misc/SwitchFlags.h>
+ 
+ #include "LibraryLoad_Hooks.h"
+ #include "Hook_Utils.h"
+@@ -184,6 +185,12 @@ class NtdllHooks
+   public:
+     static void Hook()
+     {
++        if (SwitchFlags::On("nontdll"))
++        {
++            LOG_WARN("NtdllHooks::Hook skipped (optswitch: nontdll)");
++            return;
++        }
++
+         std::lock_guard lock(hookMutex);
+ 
+         LOG_FUNC();
+diff --git a/OptiScaler/misc/SwitchFlags.h b/OptiScaler/misc/SwitchFlags.h
+new file mode 100644
+index 0000000..c2cc5a2
+--- /dev/null
++++ b/OptiScaler/misc/SwitchFlags.h
+@@ -0,0 +1,60 @@
++#pragma once
++
++// Diagnostic switch file support.
++//
++// A plain text file named "optswitch.txt" next to the proxy DLL holds one token
++// per line (or space separated). Each token disables one group of OptiScaler
++// behaviour, so a single build can bisect which group breaks a specific game
++// without rebuilding. No token = stock behaviour.
++//
++// This exists only for the BO6 compatibility investigation and is meant to be
++// removed once the real cause is fixed.
++
++#include <filesystem>
++#include <fstream>
++#include <string>
++#include <unordered_set>
++
++namespace SwitchFlags
++{
++    inline const std::unordered_set<std::string>& Flags()
++    {
++        static const std::unordered_set<std::string> flags = []()
++        {
++            std::unordered_set<std::string> result;
++
++            wchar_t modulePath[MAX_PATH] {};
++            HMODULE self = nullptr;
++            if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
++                                       GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
++                                   reinterpret_cast<LPCWSTR>(&Flags), &self) == 0 ||
++                self == nullptr)
++            {
++                return result;
++            }
++
++            if (GetModuleFileNameW(self, modulePath, MAX_PATH) == 0)
++                return result;
++
++            std::filesystem::path switchPath(modulePath);
++            switchPath.replace_filename(L"optswitch.txt");
++
++            std::ifstream in(switchPath);
++            std::string token;
++            while (in >> token)
++            {
++                if (!token.empty() && token[0] != '#')
++                    result.insert(token);
++            }
++
++            return result;
++        }();
++
++        return flags;
++    }
++
++    inline bool On(const char* name)
++    {
++        return Flags().count(name) > 0;
++    }
++}
 diff --git a/OptiScaler/proxies/NVNGX_Proxy.h b/OptiScaler/proxies/NVNGX_Proxy.h
-index 8fc32b7..1350fcb 100644
+index 8fc32b7..d4614e5 100644
 --- a/OptiScaler/proxies/NVNGX_Proxy.h
 +++ b/OptiScaler/proxies/NVNGX_Proxy.h
-@@ -430,6 +430,13 @@ class NVNGXProxy
+@@ -4,6 +4,7 @@
+ #include "Util.h"
+ #include "Config.h"
+ #include "Logger.h"
++#include <misc/SwitchFlags.h>
+ 
+ #include <proxies/Ntdll_Proxy.h>
+ #include <proxies/KernelBase_Proxy.h>
+@@ -430,6 +431,12 @@ class NVNGXProxy
    public:
      static void InitNVNGX(HMODULE nvngxModule = nullptr)
      {
-+        wchar_t noNvngx[8] {};
-+        if (GetEnvironmentVariableW(L"OPTI_NO_NVNGX", noNvngx, 8) > 0 && noNvngx[0] == L'1')
++        if (SwitchFlags::On("nonvngx"))
 +        {
-+            LOG_WARN("NVNGXProxy::InitNVNGX skipped (OPTI_NO_NVNGX=1)");
++            LOG_WARN("NVNGXProxy::InitNVNGX skipped (optswitch: nonvngx)");
 +            return;
 +        }
 +
