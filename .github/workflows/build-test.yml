@@ -61,7 +61,7 @@ jobs:
         run: git apply --verbose .github/bo6/compat.patch
 
       - name: 重放汉化层
-        if: false
+        if: ${{ github.event_name == 'push' || inputs.apply_localize }}
         shell: bash
         run: python scripts/apply_patch.py . --report apply-report.json
 
