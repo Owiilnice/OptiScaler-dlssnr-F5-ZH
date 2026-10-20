@@ -1,5 +1,5 @@
 diff --git a/OptiScaler/dllmain.cpp b/OptiScaler/dllmain.cpp
-index ccc85ea..76b4d72 100644
+index ccc85ea..38339ab 100644
 --- a/OptiScaler/dllmain.cpp
 +++ b/OptiScaler/dllmain.cpp
 @@ -48,6 +48,8 @@
@@ -113,7 +113,33 @@ index ccc85ea..76b4d72 100644
      if (slModule != nullptr)
      {
          LOG_DEBUG("sl.interposer.dll already in memory");
-@@ -1751,6 +1781,12 @@ void CheckForExcludedProcess()
+@@ -1039,6 +1069,12 @@ static void CheckWorkingMode()
+         StreamlineHooks::hookCommon(slCommon);
+     }
+ 
++    if (SwitchFlags::On("noproxyinit"))
++    {
++        LOG_WARN("XeSS/NVNGX/FFX proxy init skipped (optswitch: noproxyinit)");
++        return;
++    }
++
+     // XeSS
+     HMODULE xessModule = nullptr;
+     xessModule = GetDllNameWModule(&xessNamesW);
+@@ -1065,6 +1101,12 @@ static void CheckWorkingMode()
+         NVNGXProxy::InitNVNGX(nvngxModule);
+     }
+ 
++    if (SwitchFlags::On("noffx"))
++    {
++        LOG_WARN("FFX proxy init skipped (optswitch: noffx)");
++        return;
++    }
++
+     // FFX Dx12
+     HMODULE ffxDx12Module = nullptr;
+     ffxDx12Module = GetDllNameWModule(&ffxDx12NamesW);
+@@ -1751,6 +1793,12 @@ void CheckForExcludedProcess()
  
  void CheckMemoryForProxies()
  {
@@ -126,7 +152,7 @@ index ccc85ea..76b4d72 100644
      FfxApiProxy::InitFfxDx12();
      FfxApiProxy::InitFfxDx12_SR();
      FfxApiProxy::InitFfxDx12_FG();
-@@ -1848,6 +1884,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
+@@ -1848,6 +1896,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
  
          CheckForExcludedProcess();
  
@@ -135,7 +161,7 @@ index ccc85ea..76b4d72 100644
          if (_passThruMode)
          {
              NtdllProxy::Init();
-@@ -1867,6 +1905,12 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
+@@ -1867,6 +1917,12 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
              Config::Instance()->LogLevel.set_volatile_value(1);
  #endif
  
@@ -148,7 +174,7 @@ index ccc85ea..76b4d72 100644
          PrepareLogger();
  
          // Off by default: a crash then leaves no file behind, and the game's own crash handling is untouched
-@@ -2024,7 +2068,21 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
+@@ -2024,7 +2080,21 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
              return nvidiaDetected;
          };
  
@@ -171,7 +197,7 @@ index ccc85ea..76b4d72 100644
  
          spdlog::info("");
          spdlog::info("Check for DLSS files");
-@@ -2088,9 +2146,28 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
+@@ -2088,9 +2158,28 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
  
          // Check for working mode and attach hooks
          spdlog::info("");
@@ -200,7 +226,7 @@ index ccc85ea..76b4d72 100644
          // OptiFG & Overlay Checks
          if ((Config::Instance()->FGInput.value_or_default() == FGInput::Upscaler) &&
              !Config::Instance()->DisableOverlays.has_value())
-@@ -2211,11 +2288,20 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
+@@ -2211,11 +2300,20 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
          }
  
          spdlog::info("");
