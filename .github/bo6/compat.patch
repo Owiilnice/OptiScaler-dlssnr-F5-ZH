@@ -1,5 +1,5 @@
 diff --git a/OptiScaler/dllmain.cpp b/OptiScaler/dllmain.cpp
-index ccc85ea..803f623 100644
+index ccc85ea..73d9160 100644
 --- a/OptiScaler/dllmain.cpp
 +++ b/OptiScaler/dllmain.cpp
 @@ -48,6 +48,8 @@
@@ -110,7 +110,30 @@ index ccc85ea..803f623 100644
          PrepareLogger();
  
          // Off by default: a crash then leaves no file behind, and the game's own crash handling is untouched
-@@ -2089,8 +2118,21 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
+@@ -2024,7 +2053,21 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
+             return nvidiaDetected;
+         };
+ 
+-        bool possibleNvidia = isNvidiaViaNvapi();
++        if (SwitchFlags::On("stop1"))
++        {
++            spdlog::warn("early return (optswitch: stop1)");
++            return true;
++        }
++
++        bool possibleNvidia = false;
++        if (SwitchFlags::On("skipnvapiinit"))
++        {
++            spdlog::warn("isNvidiaViaNvapi skipped (optswitch: skipnvapiinit)");
++        }
++        else
++        {
++            possibleNvidia = isNvidiaViaNvapi();
++        }
+ 
+         spdlog::info("");
+         spdlog::info("Check for DLSS files");
+@@ -2089,8 +2132,21 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
          // Check for working mode and attach hooks
          spdlog::info("");
          CheckWorkingMode();
@@ -132,7 +155,7 @@ index ccc85ea..803f623 100644
          // OptiFG & Overlay Checks
          if ((Config::Instance()->FGInput.value_or_default() == FGInput::Upscaler) &&
              !Config::Instance()->DisableOverlays.has_value())
-@@ -2211,11 +2253,20 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
+@@ -2211,11 +2267,20 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
          }
  
          spdlog::info("");
