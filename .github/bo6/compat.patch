@@ -1,16 +1,17 @@
 diff --git a/OptiScaler/dllmain.cpp b/OptiScaler/dllmain.cpp
-index ccc85ea..01cea3f 100644
+index ccc85ea..f5a636a 100644
 --- a/OptiScaler/dllmain.cpp
 +++ b/OptiScaler/dllmain.cpp
-@@ -48,6 +48,7 @@
+@@ -48,6 +48,8 @@
  
  #include <cwctype>
  #include <magic_enum.hpp>
 +#include <misc/SwitchFlags.h>
++#include <misc/DiagCrashLog.h>
  #include <version_check.h>
  #include <misc/IdentifyGpu.h>
  #include <sha1/sha1.hpp>
-@@ -956,26 +957,34 @@ static void CheckWorkingMode()
+@@ -956,26 +958,34 @@ static void CheckWorkingMode()
  
      // NVAPI
      // Doesn't seem to like GetModuleHandle for some reason, so call our load to make sure
@@ -57,7 +58,7 @@ index ccc85ea..01cea3f 100644
      }
  
      // User32
-@@ -987,6 +996,11 @@ static void CheckWorkingMode()
+@@ -987,6 +997,11 @@ static void CheckWorkingMode()
      // hook streamline right away if it's already loaded
      HMODULE slModule = nullptr;
      slModule = GetDllNameWModule(&slInterposerNamesW);
@@ -69,7 +70,7 @@ index ccc85ea..01cea3f 100644
      if (slModule != nullptr)
      {
          LOG_DEBUG("sl.interposer.dll already in memory");
-@@ -1751,6 +1765,12 @@ void CheckForExcludedProcess()
+@@ -1751,6 +1766,12 @@ void CheckForExcludedProcess()
  
  void CheckMemoryForProxies()
  {
@@ -82,7 +83,16 @@ index ccc85ea..01cea3f 100644
      FfxApiProxy::InitFfxDx12();
      FfxApiProxy::InitFfxDx12_SR();
      FfxApiProxy::InitFfxDx12_FG();
-@@ -2215,7 +2235,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
+@@ -1848,6 +1869,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
+ 
+         CheckForExcludedProcess();
+ 
++        DiagCrashLog::Install();
++
+         if (_passThruMode)
+         {
+             NtdllProxy::Init();
+@@ -2215,7 +2238,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
          spdlog::info("---------------------------------------------");
          spdlog::info("");
  
@@ -204,6 +214,117 @@ index 2db86eb..81ac737 100644
          std::lock_guard lock(hookMutex);
  
          LOG_FUNC();
+diff --git a/OptiScaler/misc/DiagCrashLog.h b/OptiScaler/misc/DiagCrashLog.h
+new file mode 100644
+index 0000000..876f0b2
+--- /dev/null
++++ b/OptiScaler/misc/DiagCrashLog.h
+@@ -0,0 +1,105 @@
++#pragma once
++
++// Diagnostic crash logging for the BO6 investigation.
++//
++// OptiScaler's own handler only records the exception code and address. That is
++// not enough when the fault address lands in the game's own module: we need to
++// know who called it. This handler dumps a crude stack scan (module+offset for
++// every stack slot that points into a loaded module) so the caller chain shows
++// up in OptiScaler.log.
++//
++// Remove together with SwitchFlags.h once the real cause is fixed.
++
++#include <windows.h>
++
++#include <cstdio>
++
++namespace DiagCrashLog
++{
++    inline void DescribeAddress(DWORD64 address, char* out, size_t outSize)
++    {
++        HMODULE module = nullptr;
++        if (address != 0 &&
++            GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
++                                   GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
++                               reinterpret_cast<LPCWSTR>(static_cast<uintptr_t>(address)), &module) != 0 &&
++            module != nullptr)
++        {
++            wchar_t path[MAX_PATH] {};
++            if (GetModuleFileNameW(module, path, MAX_PATH) > 0)
++            {
++                const wchar_t* name = wcsrchr(path, L'\\');
++                name = (name != nullptr) ? name + 1 : path;
++
++                char narrow[MAX_PATH] {};
++                WideCharToMultiByte(CP_UTF8, 0, name, -1, narrow, MAX_PATH, nullptr, nullptr);
++                snprintf(out, outSize, "%s+0x%llx", narrow,
++                         static_cast<unsigned long long>(address - reinterpret_cast<DWORD64>(module)));
++                return;
++            }
++        }
++
++        snprintf(out, outSize, "0x%llx", static_cast<unsigned long long>(address));
++    }
++
++    inline LONG CALLBACK Handler(EXCEPTION_POINTERS* info)
++    {
++        if (info == nullptr || info->ExceptionRecord == nullptr || info->ContextRecord == nullptr)
++            return EXCEPTION_CONTINUE_SEARCH;
++
++        const DWORD code = info->ExceptionRecord->ExceptionCode;
++        if (code != 0xC0000005 && code != 0xC0000006 && code != 0xC000001D && code != 0xC0000096 &&
++            code != 0xC0000409)
++        {
++            return EXCEPTION_CONTINUE_SEARCH;
++        }
++
++        static volatile LONG busy = 0;
++        if (InterlockedExchange(&busy, 1) != 0)
++            return EXCEPTION_CONTINUE_SEARCH;
++
++        char report[3072] {};
++        int used = 0;
++        char item[320] {};
++
++        DescribeAddress(static_cast<DWORD64>(reinterpret_cast<uintptr_t>(info->ExceptionRecord->ExceptionAddress)),
++                        item, sizeof(item));
++        used += snprintf(report + used, sizeof(report) - used, "[diag] exception 0x%08lX at %s rsp=0x%llx\n", code,
++                         item, static_cast<unsigned long long>(info->ContextRecord->Rsp));
++
++        // Crude stack scan: a slot that points into a module is almost always a
++        // return address, which is all we need to see the caller chain.
++        __try
++        {
++            const auto* slots = reinterpret_cast<const DWORD64*>(info->ContextRecord->Rsp);
++            for (int i = 0; i < 768 && used < static_cast<int>(sizeof(report)) - 360; i++)
++            {
++                char frame[320] {};
++                DescribeAddress(slots[i], frame, sizeof(frame));
++                if (frame[0] == '0' && frame[1] == 'x')
++                    continue;
++
++                used += snprintf(report + used, sizeof(report) - used, "[diag]   +0x%03x %s\n", i * 8, frame);
++            }
++        }
++        __except (EXCEPTION_EXECUTE_HANDLER)
++        {
++            used += snprintf(report + used, sizeof(report) - used, "[diag]   stack unreadable\n");
++        }
++
++        OutputDebugStringA(report);
++        spdlog::error("{}", report);
++
++        return EXCEPTION_CONTINUE_SEARCH;
++    }
++
++    inline void Install()
++    {
++        static bool installed = false;
++        if (!installed)
++        {
++            installed = true;
++            AddVectoredExceptionHandler(1, Handler);
++        }
++    }
++}
 diff --git a/OptiScaler/misc/SwitchFlags.h b/OptiScaler/misc/SwitchFlags.h
 new file mode 100644
 index 0000000..c2cc5a2
