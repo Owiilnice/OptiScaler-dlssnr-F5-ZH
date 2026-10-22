@@ -289,7 +289,10 @@ jobs:
 
       - name: 编译
         shell: pwsh
-        run: pwsh scripts/build.ps1 -SourceDir "$env:GITHUB_WORKSPACE" -OutDir "$env:GITHUB_WORKSPACE/dist/ZH"
+        # -AcceptNvidiaLicenses：包里要带 NVIDIA 的 Streamline（DLSS-G 输出运行时）。
+        # 上游官方包也带，release notes 写明「NVIDIA's DLSS frame generation files included in the zip」。
+        # 去掉这两个参数就会出不含 Streamline 的包（FG Output = DLSSG 会缺件）。
+        run: pwsh scripts/build.ps1 -SourceDir "$env:GITHUB_WORKSPACE" -OutDir "$env:GITHUB_WORKSPACE/dist/ZH" -IncludeStreamline $true -AcceptNvidiaLicenses
 
       - name: 打包 7z
         shell: pwsh

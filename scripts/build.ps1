@@ -9,7 +9,12 @@
 param(
     [Parameter(Mandatory = $true)][string]$SourceDir,
     [Parameter(Mandatory = $true)][string]$OutDir,
-    [string]$MsbuildPath = ""
+    [string]$MsbuildPath = "",
+    # 是否把 NVIDIA Streamline（OptiScaler 自己输出 DLSS-G 时用的运行时）打进包。
+    # 对应上游 package_release.ps1 的 -IncludeDlssFrameGeneration。
+    [bool]$IncludeStreamline = $true,
+    # 分发 NVIDIA 的 DLL 需要显式同意其许可；不给就拒绝打包（与上游行为一致）。
+    [switch]$AcceptNvidiaLicenses
 )
 
 $ErrorActionPreference = 'Stop'
@@ -73,11 +78,51 @@ foreach ($d in @('docs', 'redist')) {
     if (Test-Path $p) { Copy-Item $p $OutDir -Recurse -Force }
 }
 
+# 5.5 NVIDIA Streamline —— 让 OptiScaler 自己输出 DLSS-G 时用的运行时。
+#
+#     上游 package_release.ps1 在 -IncludeDlssFrameGeneration 时会调 get_streamline.ps1，
+#     由它按 redist\streamline\manifest.json 下载 NVIDIA 官方 SDK、校验 SHA-256 与
+#     Authenticode 签名、只挑 allowlist 里的 6 个 DLL 放进 OptiScaler\streamline\。
+#
+#     本脚本原来只搬了 redist\（清单），没执行下载 —— 结果发布包里缺整个
+#     OptiScaler\streamline\ 目录（6 个 DLL、约 11 MB），凡是
+#     FG Output = DLSSG 或 FGNvngxReplacement 的用法都会缺件。2026-10-22 补上。
+if ($IncludeStreamline) {
+    if (-not $AcceptNvidiaLicenses) {
+        throw ("IncludeStreamline 会随包分发 NVIDIA 的 DLL，需要 -AcceptNvidiaLicenses。" +
+               "先读 docs/DLSS-FRAME-GENERATION.md 与其中的 NVIDIA 许可；" +
+               "或传 -IncludeStreamline `$false 出一个不含 Streamline 的包。")
+    }
+
+    $slDir = Join-Path $OutDir 'streamline'
+    if (Test-Path -LiteralPath $slDir) {
+        throw "产物里已存在 streamline 目录（$slDir）：不接受来源不明的 Stack，先清掉再打包。"
+    }
+
+    Write-Host "取 NVIDIA Streamline（DLSS-G 输出运行时）..."
+    # get_streamline.ps1 用 throw 报错，$ErrorActionPreference = 'Stop' 会让失败直接中断构建
+    # —— 这是想要的：宁可这次不发版，也不要悄悄发出一个缺件的包。
+    & (Join-Path $SourceDir 'get_streamline.ps1') -Destination $slDir -AcceptNvidiaLicenses
+}
+
 # 6. 自检：汉化版的两个标志物必须在产物里，否则说明补丁没生效就打包了
 $dll = Join-Path $OutDir "OptiScaler.dll"
 if (-not (Test-Path $dll)) { throw "产物缺 OptiScaler.dll" }
 $font = Join-Path $OutDir "font\wqy-microhei.ttc"
 if (-not (Test-Path $font)) { throw "产物缺 font\wqy-microhei.ttc —— 中文字体会渲染不出来" }
+
+# Streamline 若声明要带，6 个 DLL 一个都不能少（清单见 redist\streamline\manifest.json）
+if ($IncludeStreamline) {
+    $slDir = Join-Path $OutDir 'streamline'
+    $slNeed = @('sl.interposer.dll', 'sl.common.dll', 'sl.dlss_g.dll',
+                'sl.reflex.dll', 'sl.pcl.dll', 'nvngx_dlssg.dll')
+    foreach ($n in $slNeed) {
+        if (-not (Test-Path (Join-Path $slDir $n))) { throw "产物缺 streamline\$n" }
+    }
+    Write-Host "Streamline: 6 个 DLL 齐全"
+} else {
+    Write-Host "Streamline: 按 -IncludeStreamline `$false 跳过（包内不会有 DLSS-G 输出运行时）"
+}
 
 # 7. 生成 SHA256SUMS.txt（上游发布包里也有，用于校验下载完整性）。
 #    显式用无 BOM 的 UTF-8：PowerShell 5.1 的 -Encoding utf8 会写 BOM，
