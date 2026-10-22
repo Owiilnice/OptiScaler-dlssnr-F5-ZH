@@ -99,7 +99,10 @@ if ($includeStreamline) {
                "或传 -SkipStreamline 出一个不含 Streamline 的包。")
     }
 
-    $slDir = Join-Path $OutDir 'streamline'
+    # 位置必须是 <包根>\OptiScaler\streamline —— OptiScaler 只在
+    # <DLL 目录>\OptiScaler\streamline\ 下找它（Util.cpp:534 `optiPath /= L"streamline"`）。
+    # 放到包根\streamline 是错的：那个目录游戏看不到，等于没带。
+    $slDir = Join-Path $OutDir 'OptiScaler\streamline'
     if (Test-Path -LiteralPath $slDir) {
         throw "产物里已存在 streamline 目录（$slDir）：不接受来源不明的 Stack，先清掉再打包。"
     }
@@ -118,13 +121,13 @@ if (-not (Test-Path $font)) { throw "产物缺 font\wqy-microhei.ttc —— 中�
 
 # Streamline 若声明要带，6 个 DLL 一个都不能少（清单见 redist\streamline\manifest.json）
 if ($includeStreamline) {
-    $slDir = Join-Path $OutDir 'streamline'
+    $slDir = Join-Path $OutDir 'OptiScaler\streamline'
     $slNeed = @('sl.interposer.dll', 'sl.common.dll', 'sl.dlss_g.dll',
                 'sl.reflex.dll', 'sl.pcl.dll', 'nvngx_dlssg.dll')
     foreach ($n in $slNeed) {
-        if (-not (Test-Path (Join-Path $slDir $n))) { throw "产物缺 streamline\$n" }
+        if (-not (Test-Path (Join-Path $slDir $n))) { throw "产物缺 OptiScaler\streamline\$n" }
     }
-    Write-Host "Streamline: 6 个 DLL 齐全"
+    Write-Host "Streamline: OptiScaler\streamline\ 下 6 个 DLL 齐全"
 } else {
     Write-Host "Streamline: 按 -SkipStreamline 跳过（包内不会有 DLSS-G 输出运行时）"
 }
