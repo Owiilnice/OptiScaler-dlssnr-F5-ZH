@@ -10,14 +10,19 @@ param(
     [Parameter(Mandatory = $true)][string]$SourceDir,
     [Parameter(Mandatory = $true)][string]$OutDir,
     [string]$MsbuildPath = "",
-    # 是否把 NVIDIA Streamline（OptiScaler 自己输出 DLSS-G 时用的运行时）打进包。
+    # 默认把 NVIDIA Streamline（OptiScaler 自己输出 DLSS-G 时用的运行时）打进包，
     # 对应上游 package_release.ps1 的 -IncludeDlssFrameGeneration。
-    [bool]$IncludeStreamline = $true,
+    # 用 [switch] 而不是 [bool]：CI 里 `-IncludeStreamline $true` 会被当成字符串传进来，
+    # 参数绑定直接报「Cannot convert System.String to System.Boolean」。
+    # 要出不含它的包就传 -SkipStreamline。
+    [switch]$SkipStreamline,
     # 分发 NVIDIA 的 DLL 需要显式同意其许可；不给就拒绝打包（与上游行为一致）。
     [switch]$AcceptNvidiaLicenses
 )
 
 $ErrorActionPreference = 'Stop'
+
+$includeStreamline = -not $SkipStreamline
 
 # 1. 找 MSBuild。CI 里 setup-msbuild 已放进 PATH；本地用 vswhere 兜底。
 if ($MsbuildPath -and (Test-Path $MsbuildPath)) {
@@ -87,11 +92,11 @@ foreach ($d in @('docs', 'redist')) {
 #     本脚本原来只搬了 redist\（清单），没执行下载 —— 结果发布包里缺整个
 #     OptiScaler\streamline\ 目录（6 个 DLL、约 11 MB），凡是
 #     FG Output = DLSSG 或 FGNvngxReplacement 的用法都会缺件。2026-10-22 补上。
-if ($IncludeStreamline) {
+if ($includeStreamline) {
     if (-not $AcceptNvidiaLicenses) {
         throw ("IncludeStreamline 会随包分发 NVIDIA 的 DLL，需要 -AcceptNvidiaLicenses。" +
                "先读 docs/DLSS-FRAME-GENERATION.md 与其中的 NVIDIA 许可；" +
-               "或传 -IncludeStreamline `$false 出一个不含 Streamline 的包。")
+               "或传 -SkipStreamline 出一个不含 Streamline 的包。")
     }
 
     $slDir = Join-Path $OutDir 'streamline'
@@ -112,7 +117,7 @@ $font = Join-Path $OutDir "font\wqy-microhei.ttc"
 if (-not (Test-Path $font)) { throw "产物缺 font\wqy-microhei.ttc —— 中文字体会渲染不出来" }
 
 # Streamline 若声明要带，6 个 DLL 一个都不能少（清单见 redist\streamline\manifest.json）
-if ($IncludeStreamline) {
+if ($includeStreamline) {
     $slDir = Join-Path $OutDir 'streamline'
     $slNeed = @('sl.interposer.dll', 'sl.common.dll', 'sl.dlss_g.dll',
                 'sl.reflex.dll', 'sl.pcl.dll', 'nvngx_dlssg.dll')
@@ -121,7 +126,7 @@ if ($IncludeStreamline) {
     }
     Write-Host "Streamline: 6 个 DLL 齐全"
 } else {
-    Write-Host "Streamline: 按 -IncludeStreamline `$false 跳过（包内不会有 DLSS-G 输出运行时）"
+    Write-Host "Streamline: 按 -SkipStreamline 跳过（包内不会有 DLSS-G 输出运行时）"
 }
 
 # 7. 生成 SHA256SUMS.txt（上游发布包里也有，用于校验下载完整性）。
