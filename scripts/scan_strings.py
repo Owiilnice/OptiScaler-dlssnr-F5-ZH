@@ -305,6 +305,12 @@ def string_struct_types(text):
     这类结构体的数组元素几乎一定是界面文案（name/label 成对）。判据是结构体定义体
     里出现 `const char*` —— 数字结构体（float 数组、D3D12_RESOURCE_BARRIER 之类）
     不含，因此不会被误伤。
+
+    **含函数指针的结构体要排除**：那是钩子表/回调表，名字只是给日志和调试看的。
+    实测上游 0.1.33 新增的 `struct ScanHook { const char* name; PFN_vkVoidFunction
+    hook; PFN_vkVoidFunction* original; }` 的 `kHooks[]`（"vkCreateBuffer" 等）
+    就是栽在这 —— 翻了会直接破坏 Vulkan 钩子。界面用的 PageInfo / LookPresets::Entry
+    都不含函数指针。
     """
     out = set()
     for m in STRUCT_DECL.finditer(text):
@@ -312,8 +318,12 @@ def string_struct_types(text):
         if open_idx < 0:
             continue
         close = match_brace(text, open_idx)
-        if re.search(r"\bconst\s+char\s*\*", text[open_idx:close]):
-            out.add(m.group(1))
+        body = text[open_idx:close]
+        if not re.search(r"\bconst\s+char\s*\*", body):
+            continue
+        if re.search(r"\bPFN_\w+|\b[A-Za-z_]\w*\s*\(\s*\*\s*\w+\s*\)\s*\(", body):
+            continue  # 钩子表 / 回调表，不是界面文案
+        out.add(m.group(1))
     return out
 
 
